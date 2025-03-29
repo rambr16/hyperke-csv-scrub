@@ -1,3 +1,4 @@
+
 import React, { createContext, useState, useContext } from 'react';
 import Papa from 'papaparse';
 import { useToast } from "@/components/ui/use-toast";
@@ -410,11 +411,14 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     // Step 1: Remove duplicates based on email
     const uniqueEmails = new Set<string>();
-    let uniqueData = data.filter(row => {
+    let uniqueData = data.map(row => {
       const email = row[emailColumn]?.toLowerCase() || '';
-      if (!email || uniqueEmails.has(email)) return false;
+      // Mark duplicates instead of removing them
+      if (!email || uniqueEmails.has(email)) {
+        return { ...row, to_be_deleted: 'Yes (Duplicate Email)' };
+      }
       uniqueEmails.add(email);
-      return true;
+      return { ...row, to_be_deleted: 'No' };
     });
     
     updateTask(taskId, { progress: 30 });
@@ -439,7 +443,7 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     updateTask(taskId, { progress: 50 });
     
-    // Step 3: Count domain occurrences and filter if > 6
+    // Step 3: Count domain occurrences and mark for deletion if > 6
     const domainCounts: Record<string, number> = {};
     uniqueData.forEach(row => {
       const domain = row.cleaned_website || '';
@@ -448,9 +452,12 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     });
     
-    uniqueData = uniqueData.filter(row => {
+    uniqueData = uniqueData.map(row => {
       const domain = row.cleaned_website || '';
-      return !domain || domainCounts[domain] <= 6;
+      if (domain && domainCounts[domain] > 6 && row.to_be_deleted === 'No') {
+        return { ...row, to_be_deleted: 'Yes (Domain Frequency > 6)' };
+      }
+      return row;
     });
     
     updateTask(taskId, { progress: 60 });
@@ -458,13 +465,13 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Step 4: Assign other_dm_name for repeated domains using round robin
     const domainGroups: Record<string, Array<{ email: string, fullName: string, row: Record<string, any> }>> = {};
     
-    // Group rows by domain
+    // Group rows by domain (only include rows not marked for deletion)
     uniqueData.forEach(row => {
       const domain = row.cleaned_website || '';
       const email = row[emailColumn] || '';
       const fullName = row['full_name'] || row['name'] || '';
       
-      if (domain && email && !isGenericEmail(email)) {
+      if (domain && email && !isGenericEmail(email) && row.to_be_deleted === 'No') {
         if (!domainGroups[domain]) {
           domainGroups[domain] = [];
         }
@@ -527,33 +534,38 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     updateTask(taskId, { progress: 15 });
     
-    // Step 1: Organize email data and remove duplicates
+    // Step 1: Organize email data and mark duplicates
     const allEmails = new Set<string>();
-    let processedData = data.filter(row => {
+    let processedData = data.map(row => {
       // Check for email_1, email_2, email_3
       const email1 = row['email_1'] || '';
       const email2 = row['email_2'] || '';
       const email3 = row['email_3'] || '';
       
-      // Keep row if at least one email is unique
-      let keepRow = false;
+      // Check if all emails are duplicates
+      let allDuplicates = true;
       
       if (email1 && !allEmails.has(email1)) {
         allEmails.add(email1);
-        keepRow = true;
+        allDuplicates = false;
       }
       
       if (email2 && !allEmails.has(email2)) {
         allEmails.add(email2);
-        keepRow = true;
+        allDuplicates = false;
       }
       
       if (email3 && !allEmails.has(email3)) {
         allEmails.add(email3);
-        keepRow = true;
+        allDuplicates = false;
       }
       
-      return keepRow;
+      // Mark for deletion if all emails are duplicates or no emails exist
+      if (allDuplicates || (!email1 && !email2 && !email3)) {
+        return { ...row, to_be_deleted: 'Yes (All Emails Duplicate or No Emails)' };
+      }
+      
+      return { ...row, to_be_deleted: 'No' };
     });
     
     updateTask(taskId, { progress: 30 });
@@ -582,18 +594,23 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     updateTask(taskId, { progress: 45 });
     
-    // Step 3: Count domain occurrences and filter if > 5
+    // Step 3: Count domain occurrences and mark if > 5
     const domainCounts: Record<string, number> = {};
     processedData.forEach(row => {
-      const domain = row.cleaned_website || '';
-      if (domain) {
-        domainCounts[domain] = (domainCounts[domain] || 0) + 1;
+      if (row.to_be_deleted === 'No') {
+        const domain = row.cleaned_website || '';
+        if (domain) {
+          domainCounts[domain] = (domainCounts[domain] || 0) + 1;
+        }
       }
     });
     
-    processedData = processedData.filter(row => {
+    processedData = processedData.map(row => {
       const domain = row.cleaned_website || '';
-      return !domain || domainCounts[domain] <= 5;
+      if (domain && domainCounts[domain] > 5 && row.to_be_deleted === 'No') {
+        return { ...row, to_be_deleted: 'Yes (Domain Frequency > 5)' };
+      }
+      return row;
     });
     
     updateTask(taskId, { progress: 60 });
@@ -604,8 +621,10 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       emails: Array<{ email: string, fullName: string }>
     }>> = {};
     
-    // Group rows by domain and collect emails + full names
+    // Group rows by domain and collect emails + full names (only include rows not marked for deletion)
     processedData.forEach(row => {
+      if (row.to_be_deleted !== 'No') return;
+      
       const domain = row.cleaned_website || '';
       if (!domain) return;
       
