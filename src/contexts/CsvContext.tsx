@@ -465,28 +465,43 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     });
     
-    // Assign other_dm_name for domains with multiple occurrences
-    Object.entries(domainCounts).forEach(([domain, indices]) => {
-      if (indices.length > 1) {
-        const validIndices = indices.filter(index => 
-          processedData[index].to_be_deleted === 'No' &&
-          processedData[index].domain_occurrence_count >= 1 &&
-          processedData[index].domain_occurrence_count <= 6 &&
-          !isGenericEmail(processedData[index][emailColumn] || '') &&
-          processedData[index].full_name
-        );
-        
-        if (validIndices.length > 1) {
-          // Round-robin assignment of full names
-          validIndices.forEach((index, i) => {
-            const nextIndex = validIndices[(i + 1) % validIndices.length];
-            const nextFullName = processedData[nextIndex].full_name || '';
-            
-            if (nextFullName && nextIndex !== index) {
-              processedData[index].other_dm_name = nextFullName;
-            }
-          });
+    // Clear the other_dm_name field for all rows before assignment
+    processedData.forEach(row => {
+      row.other_dm_name = '';
+    });
+    
+    // Group valid rows by domain for other_dm_name assignment
+    const validDomainRows: Record<string, Array<{index: number, fullName: string, email: string}>> = {};
+    
+    processedData.forEach((row, index) => {
+      const domain = row.cleaned_website || '';
+      const fullName = row.full_name || row[fullNameColumn] || '';
+      const email = row[emailColumn] || '';
+      
+      if (domain && 
+          row.to_be_deleted === 'No' && 
+          row.domain_occurrence_count >= 1 && 
+          row.domain_occurrence_count <= 6 && 
+          fullName && 
+          email && 
+          !isGenericEmail(email)) {
+        if (!validDomainRows[domain]) {
+          validDomainRows[domain] = [];
         }
+        validDomainRows[domain].push({index, fullName, email});
+      }
+    });
+    
+    // Assign other_dm_name using round-robin pattern for each domain group
+    Object.values(validDomainRows).forEach(rows => {
+      if (rows.length > 1) {
+        rows.forEach((row, i) => {
+          // Get the next row in a circular pattern
+          const nextRow = rows[(i + 1) % rows.length];
+          processedData[row.index].other_dm_name = nextRow.fullName;
+          
+          console.log(`Assigned other_dm_name ${nextRow.fullName} to row with email ${row.email}`);
+        });
       }
     });
     
@@ -636,48 +651,56 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     });
     
-    // Assign other_dm_name for domains with multiple occurrences using round-robin pattern
-    Object.entries(domainCounts).forEach(([domain, indices]) => {
-      const validIndices = indices.filter(index => 
-        processedData[index].to_be_deleted === 'No' &&
-        processedData[index].domain_occurrence_count >= 1 &&
-        processedData[index].domain_occurrence_count <= 6
-      );
+    // Clear the other_dm_name field for all rows before assignment
+    processedData.forEach(row => {
+      row.other_dm_name = '';
+    });
+    
+    // Collect valid contacts for other_dm_name assignment by domain
+    const validContactsByDomain: Record<string, Array<{rowIndex: number, fullName: string, email: string}>> = {};
+    
+    processedData.forEach((row, index) => {
+      const domain = row.cleaned_website || '';
+      if (!domain || row.to_be_deleted !== 'No' || row.domain_occurrence_count < 1 || row.domain_occurrence_count > 6) {
+        return;
+      }
       
-      if (validIndices.length > 1) {
-        // Collect all valid contacts with non-generic emails and full names
-        const contacts: Array<{rowIndex: number, emailField: string, fullName: string}> = [];
+      // Check each email field
+      for (let i = 1; i <= 3; i++) {
+        const emailField = `email_${i}`;
+        const email = row[emailField] || '';
+        const fullNameField = `email_${i}_full_name`;
+        let fullName = row[fullNameField] || '';
         
-        validIndices.forEach(index => {
-          const row = processedData[index];
+        // Fallback to Full Name field if email_1_full_name is empty
+        if (i === 1 && !fullName) {
+          fullName = row['Full Name'] || '';
+        }
+        
+        if (email && fullName && !isGenericEmail(email)) {
+          if (!validContactsByDomain[domain]) {
+            validContactsByDomain[domain] = [];
+          }
+          validContactsByDomain[domain].push({rowIndex: index, fullName, email});
           
-          for (let i = 1; i <= 3; i++) {
-            const emailField = `email_${i}`;
-            const email = row[emailField] || '';
-            const fullNameField = `email_${i}_full_name`;
-            let fullName = row[fullNameField] || '';
-            
-            // Fallback to Full Name field if email_1_full_name is empty
-            if (i === 1 && !fullName) {
-              fullName = row['Full Name'] || '';
-            }
-            
-            if (email && fullName && !isGenericEmail(email)) {
-              contacts.push({rowIndex: index, emailField, fullName});
-            }
+          console.log(`Found valid contact: ${email} with name ${fullName} for domain ${domain}`);
+        }
+      }
+    });
+    
+    // Assign other_dm_name using round-robin pattern for each domain
+    Object.entries(validContactsByDomain).forEach(([domain, contacts]) => {
+      if (contacts.length > 1) {
+        contacts.forEach((contact, i) => {
+          // Get the next contact in a circular pattern
+          const nextContact = contacts[(i + 1) % contacts.length];
+          
+          // Make sure we're not assigning a contact to themselves
+          if (nextContact.rowIndex !== contact.rowIndex) {
+            processedData[contact.rowIndex].other_dm_name = nextContact.fullName;
+            console.log(`Assigned other_dm_name ${nextContact.fullName} to row with email ${contact.email}`);
           }
         });
-        
-        // Round-robin assignment of full names if we have multiple contacts
-        if (contacts.length > 1) {
-          contacts.forEach((contact, i) => {
-            const nextContact = contacts[(i + 1) % contacts.length];
-            
-            if (nextContact.rowIndex !== contact.rowIndex && nextContact.fullName) {
-              processedData[contact.rowIndex].other_dm_name = nextContact.fullName;
-            }
-          });
-        }
       }
     });
     

@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Download, File, AlertCircle, CheckCircle, Clock } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 const TaskList = () => {
   const { tasks, downloadResult } = useCsv();
@@ -78,8 +79,41 @@ const TaskList = () => {
             )}
 
             {task.status === 'completed' && task.result && task.result.length > 0 && (
-              <div className="mt-2 text-sm text-gray-600">
-                {task.result.length} rows processed
+              <div className="mt-2 space-y-4">
+                <div className="text-sm text-gray-600">
+                  {task.result.length} rows processed
+                </div>
+                
+                {/* Preview of processed data */}
+                <div className="mt-4 border rounded">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Full Name</TableHead>
+                        <TableHead>Other DM Name</TableHead>
+                        <TableHead>Domain</TableHead>
+                        <TableHead>MX Provider</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {task.result.slice(0, 5).map((row, idx) => (
+                        <TableRow key={idx}>
+                          <TableCell>{row.email || row.email_1 || '-'}</TableCell>
+                          <TableCell>{row.full_name || row.email_1_full_name || '-'}</TableCell>
+                          <TableCell>{row.other_dm_name || '-'}</TableCell>
+                          <TableCell>{row.cleaned_website || '-'}</TableCell>
+                          <TableCell>{row.mx_provider || row.mx_provider_1 || '-'}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  {task.result.length > 5 && (
+                    <div className="p-2 text-center text-sm text-gray-500">
+                      Showing 5 of {task.result.length} rows. Download for complete data.
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
