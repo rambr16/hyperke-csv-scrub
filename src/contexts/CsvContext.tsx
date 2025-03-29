@@ -2,9 +2,10 @@
 import React, { createContext, useState, useContext } from 'react';
 import Papa from 'papaparse';
 import { useToast } from "@/components/ui/use-toast";
-import { CsvType, Task, CsvContextType } from '@/types/csv';
+import { Task, CsvContextType } from '@/types/csv';
 import { detectCsvType } from '@/utils/csvTypeDetector';
 import { downloadCsvResult } from '@/utils/csvDownloader';
+import { batchProcessMxLookups } from '@/utils/domainUtils';
 import { 
   processDomainOnlyCsv, 
   processSingleEmailCsv, 
@@ -18,14 +19,12 @@ const CsvContext = createContext<CsvContextType>({
   getTask: () => undefined,
   updateTask: () => {},
   resetTasks: () => {},
-  detectCsvType: () => 'unknown',
+  detectCsvType,
   processCsv: async () => {},
   downloadResult: () => {}
 });
 
 export const useCsv = () => useContext(CsvContext);
-
-export { CsvType };
 
 export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -142,6 +141,46 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               
             default:
               throw new Error("Unknown CSV type");
+          }
+          
+          // Process MX lookups in batches
+          updateTask(taskId, { progress: 70, status: 'processing' });
+          
+          const domains: string[] = [];
+          
+          // Collect all domains for batch processing
+          processedData.forEach(row => {
+            if (row.cleaned_website) {
+              domains.push(row.cleaned_website);
+            }
+          });
+          
+          console.log(`Starting batch MX lookup for ${domains.length} domains`);
+          
+          try {
+            // Process MX lookups in batches and track progress
+            const mxResults = await batchProcessMxLookups(
+              domains,
+              10, // process 10 domains at a time
+              (processed, total) => {
+                const progress = 70 + Math.floor((processed / total) * 20);
+                updateTask(taskId, { progress: Math.min(90, progress) });
+              }
+            );
+            
+            // Update processed data with MX results
+            processedData = processedData.map(row => {
+              if (row.cleaned_website && mxResults[row.cleaned_website]) {
+                return {
+                  ...row,
+                  mx_provider: mxResults[row.cleaned_website]
+                };
+              }
+              return row;
+            });
+          } catch (error) {
+            console.error("Error during MX batch processing:", error);
+            // Continue with processing even if MX lookup fails
           }
           
           // Apply final processing to all data

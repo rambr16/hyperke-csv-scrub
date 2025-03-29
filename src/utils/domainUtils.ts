@@ -82,61 +82,148 @@ export const isGenericEmail = (email: string): boolean => {
 };
 
 /**
- * Get the MX provider for a domain
- * Currently a placeholder that will be replaced with actual API call later
+ * Extract domain from email address
  */
-export const getMxProvider = async (domain: string): Promise<string> => {
+export const getDomainFromEmail = (email: string): string => {
+  if (!email || typeof email !== "string" || !email.includes('@')) {
+    return '';
+  }
+  
+  return email.split('@')[1];
+};
+
+/**
+ * Get MX provider by querying Google's DNS API
+ */
+export const getMxProviderFromDNS = async (domain: string): Promise<string> => {
+  if (!domain) {
+    console.log('Empty domain provided to getMxProviderFromDNS');
+    return 'Unknown';
+  }
+  
   try {
-    console.log(`Looking up MX provider for domain: ${domain}`);
-    
-    // This is a placeholder for a real MX lookup API call
-    // In production, this would make an API call to a DNS or email validation service
-    
-    // Simulate different MX providers based on domain name patterns for testing
-    if (domain.includes('gmail') || domain.includes('google')) {
-      return 'google';
-    } else if (domain.includes('outlook') || domain.includes('microsoft') || domain.includes('live')) {
-      return 'microsoft';
-    } else if (domain.includes('yahoo')) {
-      return 'yahoo';
-    } else if (domain.includes('apple') || domain.includes('icloud')) {
-      return 'apple';
-    }
-    
-    return 'other';
-    
-    /* 
-    // Example of what a real implementation might look like:
-    const response = await fetch(`https://your-mx-lookup-api.com/lookup?domain=${domain}`, {
-      headers: {
-        'Authorization': `Bearer ${API_KEY}`
-      }
-    });
+    console.log(`Fetching MX records for domain: ${domain}`);
+    const response = await fetch(`https://dns.google/resolve?name=${domain}&type=MX`);
     
     if (!response.ok) {
-      throw new Error(`MX lookup failed with status: ${response.status}`);
+      console.error(`DNS lookup failed with status: ${response.status}`);
+      return 'Error';
     }
     
     const data = await response.json();
     
-    if (!data.records || data.records.length === 0) {
-      return 'other';
+    if (!data.Answer || data.Answer.length === 0) {
+      console.log(`No MX records found for ${domain}`);
+      return 'No MX records';
     }
     
-    const mxRecords = data.records.map((record) => record.value.toLowerCase());
+    const mxRecords = data.Answer.map((record: { data: string }) => record.data.toLowerCase());
+    console.log(`MX records for ${domain}:`, mxRecords);
     
-    if (mxRecords.some((mx) => mx.includes('google') || mx.includes('gmail'))) {
-      return 'google';
+    // Check for Google MX records
+    if (mxRecords.some((mx: string) => mx.includes('google') || mx.includes('gmail'))) {
+      return 'Google';
     }
     
-    if (mxRecords.some((mx) => mx.includes('outlook') || mx.includes('microsoft'))) {
-      return 'microsoft';
+    // Check for Microsoft MX records
+    if (mxRecords.some((mx: string) => 
+      mx.includes('outlook') || 
+      mx.includes('microsoft') || 
+      mx.includes('hotmail') ||
+      mx.includes('office365')
+    )) {
+      return 'Microsoft';
     }
     
-    return 'other';
-    */
+    // Check for other common providers
+    if (mxRecords.some((mx: string) => mx.includes('yahoo'))) {
+      return 'Yahoo';
+    }
+    
+    if (mxRecords.some((mx: string) => mx.includes('zoho'))) {
+      return 'Zoho';
+    }
+    
+    if (mxRecords.some((mx: string) => mx.includes('protonmail'))) {
+      return 'ProtonMail';
+    }
+    
+    return 'Other';
   } catch (error) {
-    console.error("Error fetching MX records:", error);
-    return 'other';
+    console.error(`Error fetching MX records for ${domain}:`, error);
+    return 'Error';
+  }
+};
+
+/**
+ * Process MX lookups in batches to avoid rate limiting
+ */
+export const batchProcessMxLookups = async (
+  domains: string[], 
+  batchSize: number = 10,
+  onProgress?: (processed: number, total: number) => void
+): Promise<Record<string, string>> => {
+  const results: Record<string, string> = {};
+  const uniqueDomains = [...new Set(domains.filter(d => d))];
+  
+  console.log(`Processing ${uniqueDomains.length} unique domains for MX lookup`);
+  
+  // Create batches of domains
+  const batches: string[][] = [];
+  for (let i = 0; i < uniqueDomains.length; i += batchSize) {
+    batches.push(uniqueDomains.slice(i, i + batchSize));
+  }
+  
+  console.log(`Created ${batches.length} batches of MX lookups`);
+  
+  let processedCount = 0;
+  
+  // Process each batch
+  for (const batch of batches) {
+    const batchPromises = batch.map(domain => 
+      getMxProviderFromDNS(domain)
+        .then(provider => {
+          results[domain] = provider;
+          return { domain, provider };
+        })
+    );
+    
+    // Wait for all promises in the batch to resolve
+    await Promise.all(batchPromises);
+    
+    processedCount += batch.length;
+    if (onProgress) {
+      onProgress(processedCount, uniqueDomains.length);
+    }
+    
+    // Small delay to avoid overwhelming the DNS API
+    if (batches.length > 1) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+  }
+  
+  return results;
+};
+
+/**
+ * Get MX provider for an email or domain
+ */
+export const getMxProvider = async (emailOrDomain: string): Promise<string> => {
+  if (!emailOrDomain) return 'Unknown';
+  
+  let domain = emailOrDomain;
+  
+  // Extract domain if an email is provided
+  if (emailOrDomain.includes('@')) {
+    domain = getDomainFromEmail(emailOrDomain);
+  }
+  
+  if (!domain) return 'Unknown';
+  
+  try {
+    return await getMxProviderFromDNS(domain);
+  } catch (error) {
+    console.error(`Error in getMxProvider for ${domain}:`, error);
+    return 'Error';
   }
 };
