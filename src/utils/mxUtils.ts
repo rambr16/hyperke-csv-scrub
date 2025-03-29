@@ -100,7 +100,8 @@ export const fetchMxProvider = async (domain: string): Promise<string> => {
     const data = await response.json();
     
     if (!data.Answer || data.Answer.length === 0) {
-      return 'No MX records';
+      // Changed to return 'Other' instead of 'No MX records'
+      return 'Other';
     }
     
     const mxRecords = data.Answer.map((record: { data: string }) => record.data.toLowerCase());

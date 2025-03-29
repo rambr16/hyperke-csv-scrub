@@ -1,4 +1,3 @@
-
 /**
  * Contact utilities for CSV processing
  */
@@ -99,10 +98,8 @@ export const consolidateMultipleEmails = (
     const fullNameField = `email_${i}_full_name`;
     let fullName = row[fullNameField] || '';
     
-    // For the first email, try additional fallbacks
-    if (i === 1 && !fullName) {
-      fullName = extractFullName(row);
-    }
+    // No longer using company name as fallback for full name
+    // Keep fullName blank if it's not available in the specific email fields
     
     // Get title and phone if available
     const titleField = `email_${i}_title`;
