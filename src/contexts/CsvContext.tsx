@@ -1,8 +1,7 @@
-
 import React, { createContext, useState, useContext } from 'react';
 import Papa from 'papaparse';
 import { useToast } from "@/components/ui/use-toast";
-import { Task, CsvContextType } from '@/types/csv';
+import { Task, CsvContextType, CsvType } from '@/types/csv';
 import { detectCsvType } from '@/utils/csvTypeDetector';
 import { downloadCsvResult } from '@/utils/csvDownloader';
 import { batchProcessMxLookups } from '@/utils/domainUtils';
@@ -12,6 +11,8 @@ import {
   processMultipleEmailCsv,
   finalizeProcessedData
 } from '@/utils/csvProcessors';
+
+export { CsvType };
 
 const CsvContext = createContext<CsvContextType>({
   tasks: [],
