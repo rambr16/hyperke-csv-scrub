@@ -1,6 +1,17 @@
 import React, { createContext, useState, useContext } from 'react';
 import Papa from 'papaparse';
 import { useToast } from "@/components/ui/use-toast";
+import { 
+  cleanDomain, 
+  cleanCompanyName, 
+  isGenericEmail,
+  getMxProvider 
+} from '@/utils/domainUtils';
+import {
+  assignOtherDMNames,
+  extractFullName,
+  consolidateMultipleEmails
+} from '@/utils/contactUtils';
 
 // Columns to remove in output CSV
 const COLUMNS_TO_REMOVE = [
@@ -134,13 +145,14 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       h.toLowerCase().includes('email')
     );
     
+    // Check for email_1, email_2, etc. pattern
+    const hasMultipleEmails = headers.some(h => 
+      h.match(/email_[1-9]/) || h.match(/email[1-9]/)
+    );
+    
     if (emailColumns.length === 0 && hasWebsite) {
       return 'domain_only';
     }
-    
-    const hasMultipleEmails = emailColumns.some(h => 
-      h.includes('email_1') || h.includes('email_2') || h.includes('email_3')
-    );
     
     if (hasMultipleEmails) {
       return 'multiple_email';
@@ -151,105 +163,6 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     
     return 'unknown';
-  };
-
-  const cleanDomain = (url: string): string => {
-    if (!url) return '';
-    
-    try {
-      let domain = url.replace(/^(?:https?:\/\/)?(?:www\.)?/i, "");
-      
-      const domainMatch = domain.match(/^([^\/\?#]+)/);
-      if (domainMatch && domainMatch[1]) {
-        return domainMatch[1].trim();
-      }
-      
-      return domain.trim();
-    } catch (error) {
-      console.error("Error cleaning domain:", error);
-      return url.trim();
-    }
-  };
-
-  const cleanCompanyName = (name: string): string => {
-    if (!name) return '';
-    
-    try {
-      let cleaned = name.toLowerCase();
-      
-      cleaned = cleaned
-        .replace(/ ltd/g, "")
-        .replace(/ llc/g, "")
-        .replace(/ gmbh/g, "")
-        .replace(/ pvt/g, "")
-        .replace(/ private/g, "")
-        .replace(/ limited/g, "")
-        .replace(/ inc/g, "")
-        .replace(/®/g, "")
-        .replace(/™/g, "")
-        .replace(/,/g, "")
-        .replace(/ technologies/g, "");
-      
-      cleaned = cleaned.replace(/\.[a-z]+/g, "").replace(/\.$/, "");
-      
-      cleaned = cleaned.replace(/[^ -~]/g, "");
-      
-      cleaned = cleaned.replace(/\b\w/g, c => c.toUpperCase());
-      
-      cleaned = cleaned.replace(/'S/g, "'s");
-      
-      cleaned = cleaned.replace(/\s*[\|:]\s*.*/, "");
-      
-      return cleaned.trim();
-    } catch (error) {
-      console.error("Error cleaning company name:", error);
-      return name.trim();
-    }
-  };
-
-  const isGenericEmail = (email: string): boolean => {
-    if (!email) return false;
-    
-    const genericPrefixes = [
-      'info', 'contact', 'hello', 'support', 'admin', 'sales', 
-      'marketing', 'help', 'service', 'billing', 'office', 'mail',
-      'team', 'enquiries', 'enquiry', 'general', 'hr', 'careers',
-      'feedback', 'webmaster', 'helpdesk', 'customerservice', 'noreply',
-      'no-reply', 'donotreply', 'do-not-reply'
-    ];
-    
-    const emailPrefix = email.split('@')[0].toLowerCase();
-    return genericPrefixes.includes(emailPrefix);
-  };
-
-  const getMxProvider = async (domain: string): Promise<string> => {
-    try {
-      console.log(`Checking MX for domain: ${domain}`);
-      return 'other'; // Default fallback to prevent errors
-      
-      // When you have a reliable API, you can replace the above with:
-      /*
-      const response = await fetch(`https://your-reliable-dns-api.com/mx/${domain}`);
-      const data = await response.json();
-      
-      if (!data.records) return 'other';
-      
-      const mxRecords = data.records.map((record) => record.value.toLowerCase());
-      
-      if (mxRecords.some((mx) => mx.includes('google') || mx.includes('gmail'))) {
-        return 'google';
-      }
-      
-      if (mxRecords.some((mx) => mx.includes('outlook') || mx.includes('microsoft'))) {
-        return 'microsoft';
-      }
-      
-      return 'other';
-      */
-    } catch (error) {
-      console.error("Error fetching MX records:", error);
-      return 'other';
-    }
   };
 
   const processCsv = async (taskId: string, mappedColumns: Record<string, string>) => {
@@ -421,17 +334,8 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const websiteUrl = websiteColumn ? row[websiteColumn] || '' : '';
       const cleanedDomain = cleanDomain(websiteUrl);
       
-      // Try to get full name from multiple possible columns
-      let fullName = '';
-      if (fullNameColumn && row[fullNameColumn]) {
-        fullName = row[fullNameColumn];
-      } else if (row['Full Name']) {
-        fullName = row['Full Name'];
-      } else if (row['email_1_full_name']) {
-        fullName = row['email_1_full_name'];
-      } else if (row['full_name']) {
-        fullName = row['full_name'];
-      }
+      // Get full name using utility function
+      const fullName = extractFullName(row, fullNameColumn);
       
       console.log(`Row email: ${email}, fullName detected: ${fullName}`);
       
@@ -494,52 +398,70 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       row.other_dm_name = '';
     });
     
-    // Group valid rows by domain for other_dm_name assignment
-    const validDomainRows: Record<string, Array<{index: number, fullName: string, email: string}>> = {};
+    // Collect valid contacts for other_dm_name assignment
+    const validContacts: Array<{index: number, fullName: string, email: string, domain: string}> = [];
     
     processedData.forEach((row, index) => {
-      const domain = row.cleaned_website || '';
-      const fullName = row.full_name || '';
       const email = row[emailColumn] || '';
+      const fullName = row.full_name || '';
+      const domain = row.cleaned_website || '';
       
-      console.log(`Row ${index} - Domain: ${domain}, Full Name: ${fullName}, Email: ${email}, Delete: ${row.to_be_deleted}`);
+      // Use email domain if website domain is not available
+      const effectiveDomain = domain || email.split('@')[1] || '';
       
-      // We include rows even if domain is empty, as long as they have a valid email and full name
+      console.log(`Row ${index} - Domain: ${effectiveDomain}, Full Name: ${fullName}, Email: ${email}, Delete: ${row.to_be_deleted}`);
+      
       if (row.to_be_deleted === 'No' && 
           fullName && 
           email && 
           !isGenericEmail(email)) {
         
-        // Group by domain (if available) or by email domain if no website domain
-        const groupKey = domain || email.split('@')[1] || 'unknown';
-        
-        if (!validDomainRows[groupKey]) {
-          validDomainRows[groupKey] = [];
-        }
-        validDomainRows[groupKey].push({index, fullName, email});
-        
-        console.log(`Added to validDomainRows under key ${groupKey}`);
-      }
-    });
-    
-    console.log("Valid domain rows for other_dm_name assignment:", validDomainRows);
-    
-    // Assign other_dm_name using round-robin pattern for each domain group
-    Object.entries(validDomainRows).forEach(([domain, rows]) => {
-      if (rows.length > 1) {
-        rows.forEach((row, i) => {
-          // Get the next row in a circular pattern
-          const nextRow = rows[(i + 1) % rows.length];
-          processedData[row.index].other_dm_name = nextRow.fullName;
-          
-          console.log(`Assigned other_dm_name '${nextRow.fullName}' to row with email ${row.email}`);
+        validContacts.push({
+          index,
+          fullName,
+          email,
+          domain: effectiveDomain
         });
+        
+        console.log(`Added to validContacts with domain ${effectiveDomain}`);
       }
     });
     
-    // Get MX provider info - skip for now due to API issues
+    console.log(`Found ${validContacts.length} valid contacts for other_dm_name assignment`);
+    
+    // Assign other_dm_name using utility function
+    const contactsWithOtherDM = assignOtherDMNames(validContacts);
+    
+    // Update the processed data with the assigned other_dm_names
+    contactsWithOtherDM.forEach(contact => {
+      if (contact.otherDmName) {
+        processedData[contact.index].other_dm_name = contact.otherDmName;
+      }
+    });
+    
+    // Try to get MX provider info
     const total = processedData.length;
-    updateTask(taskId, { progress: 90 });
+    let mxProcessed = 0;
+    
+    updateTask(taskId, { progress: 70 });
+    
+    for (let i = 0; i < processedData.length; i++) {
+      const row = processedData[i];
+      if (row.cleaned_website) {
+        try {
+          row.mx_provider = await getMxProvider(row.cleaned_website);
+        } catch (error) {
+          console.error(`Failed to get MX provider for ${row.cleaned_website}:`, error);
+          row.mx_provider = 'other';
+        }
+      }
+      
+      mxProcessed++;
+      if (mxProcessed % 10 === 0 || mxProcessed === total) {
+        const progress = Math.min(70 + Math.floor((mxProcessed / total) * 20), 90);
+        updateTask(taskId, { progress });
+      }
+    }
     
     // Only filter out rows marked for deletion due to duplicate emails
     // Keep rows with valid emails even if the domain is empty
@@ -551,7 +473,7 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     console.log(`Final processed data has ${processedData.length} rows`);
     console.log(`Sample row other_dm_name value:`, processedData.length > 0 ? processedData[0].other_dm_name : 'No rows');
     
-    // Let's log a few example rows to verify other_dm_name is set
+    // Log a few example rows to verify other_dm_name is set
     for (let i = 0; i < Math.min(5, processedData.length); i++) {
       console.log(`Row ${i} other_dm_name: ${processedData[i].other_dm_name}`);
     }
@@ -570,100 +492,66 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     console.log("Starting processMultipleEmailCsv with mappings:", mappedColumns);
     updateTask(taskId, { progress: 15 });
     
-    // First pass: initialize fields and filter rows with all empty emails
-    let processedData = data.filter(row => {
-      const email1 = row['email_1']?.toString().toLowerCase() || '';
-      const email2 = row['email_2']?.toString().toLowerCase() || '';
-      const email3 = row['email_3']?.toString().toLowerCase() || '';
-      return email1.trim() !== '' || email2.trim() !== '' || email3.trim() !== '';
-    }).map(row => {
-      const email1 = (row['email_1'] || '').toString().toLowerCase().trim();
-      const email2 = (row['email_2'] || '').toString().toLowerCase().trim();
-      const email3 = (row['email_3'] || '').toString().toLowerCase().trim();
+    // First pass: merge multiple email columns into a single row and normalize fields
+    const processedData = data.flatMap(row => {
+      // Collect all contacts from the row
+      const contacts = consolidateMultipleEmails(row);
       
-      let fullName1 = '';
-      if (row['email_1_full_name']) {
-        fullName1 = row['email_1_full_name'];
-      } else if (row['Full Name']) {
-        fullName1 = row['Full Name'];
-      } else if (row['full_name']) {
-        fullName1 = row['full_name'];
-      }
+      // Skip row if no valid emails
+      if (contacts.length === 0) return [];
       
-      const fullName2 = row['email_2_full_name'] || '';
-      const fullName3 = row['email_3_full_name'] || '';
-      
-      console.log(`Multiple email row - Names: [${fullName1}, ${fullName2}, ${fullName3}], Emails: [${email1}, ${email2}, ${email3}]`);
-      
+      // Get company and website information
       const cleanedCompanyName = companyNameColumn ? cleanCompanyName(row[companyNameColumn] || '') : '';
       const websiteUrl = websiteColumn ? row[websiteColumn] || '' : '';
       let cleanedDomain = cleanDomain(websiteUrl);
       
-      if (!cleanedDomain && email1) {
-        const emailDomain = email1.split('@')[1] || '';
-        cleanedDomain = emailDomain;
-      } else if (!cleanedDomain && email2) {
-        const emailDomain = email2.split('@')[1] || '';
-        cleanedDomain = emailDomain;
-      } else if (!cleanedDomain && email3) {
-        const emailDomain = email3.split('@')[1] || '';
+      // Use first email domain as fallback if no website
+      if (!cleanedDomain && contacts.length > 0) {
+        const emailDomain = contacts[0].email.split('@')[1] || '';
         cleanedDomain = emailDomain;
       }
       
-      return {
-        ...row,
-        cleaned_company_name: cleanedCompanyName,
-        cleaned_website: cleanedDomain,
-        mx_provider_1: '',
-        mx_provider_2: '',
-        mx_provider_3: '',
-        other_dm_name: '',
-        to_be_deleted: 'No',
-        domain_occurrence_count: 0,
-        email_1_full_name: fullName1,
-        email_2_full_name: fullName2,
-        email_3_full_name: fullName3
-      };
+      // Create a new row for each contact
+      return contacts.map(contact => {
+        return {
+          ...row,
+          email: contact.email,
+          full_name: contact.fullName,
+          title: contact.title,
+          phone: contact.phone,
+          cleaned_company_name: cleanedCompanyName,
+          cleaned_website: cleanedDomain,
+          mx_provider: '',
+          other_dm_name: '',
+          to_be_deleted: 'No',
+          domain_occurrence_count: 0,
+          email_occurrence: 0
+        };
+      });
     });
     
-    console.log(`After initial filtering: ${processedData.length} rows remain`);
+    console.log(`After processing multiple emails: ${processedData.length} rows created`);
     updateTask(taskId, { progress: 30 });
     
-    const allEmails = new Set<string>();
+    // Deduplicate emails
+    const uniqueEmails = new Set<string>();
+    const emailIndices: Record<string, number> = {};
     const domainCounts: Record<string, Array<number>> = {};
     
-    // Second pass: check for duplicate emails and count domain occurrences
+    // Mark duplicates and count domain occurrences
     processedData.forEach((row, index) => {
-      const email1 = row['email_1'] || '';
-      const email2 = row['email_2'] || '';
-      const email3 = row['email_3'] || '';
+      const email = row.email?.toString().toLowerCase() || '';
+      const domain = row.cleaned_website || '';
       
-      let hasUniqueEmail = false;
-      
-      if (email1 && !allEmails.has(email1)) {
-        allEmails.add(email1);
-        hasUniqueEmail = true;
-      }
-      
-      if (email2 && !allEmails.has(email2)) {
-        allEmails.add(email2);
-        hasUniqueEmail = true;
-      }
-      
-      if (email3 && !allEmails.has(email3)) {
-        allEmails.add(email3);
-        hasUniqueEmail = true;
-      }
-      
-      if (!hasUniqueEmail) {
-        if (!email1 && !email2 && !email3) {
-          processedData[index].to_be_deleted = 'Yes (No Emails)';
+      if (email) {
+        if (uniqueEmails.has(email)) {
+          row.to_be_deleted = 'Yes (Duplicate Email)';
         } else {
-          processedData[index].to_be_deleted = 'Yes (All Emails Duplicate)';
+          uniqueEmails.add(email);
+          emailIndices[email] = index;
         }
       }
       
-      const domain = row.cleaned_website || '';
       if (domain) {
         if (!domainCounts[domain]) {
           domainCounts[domain] = [];
@@ -688,87 +576,83 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       row.other_dm_name = '';
     });
     
-    // Collect valid contacts for other_dm_name assignment by domain
-    const validContactsByDomain: Record<string, Array<{rowIndex: number, fullName: string, email: string}>> = {};
+    // Collect valid contacts for other_dm_name assignment
+    const validContacts: Array<{index: number, fullName: string, email: string, domain: string}> = [];
     
     processedData.forEach((row, index) => {
+      const email = row.email || '';
+      const fullName = row.full_name || '';
       const domain = row.cleaned_website || '';
       
-      // Group by domain or by a fallback key if domain is not available
-      const groupKey = domain || 'unknown';
+      // Use email domain if website domain is not available
+      const effectiveDomain = domain || email.split('@')[1] || '';
       
-      if (row.to_be_deleted !== 'No') {
-        return;
-      }
-      
-      // Check each email field
-      for (let i = 1; i <= 3; i++) {
-        const emailField = `email_${i}`;
-        const email = row[emailField] || '';
-        const fullNameField = `email_${i}_full_name`;
-        let fullName = row[fullNameField] || '';
+      if (row.to_be_deleted === 'No' && 
+          fullName && 
+          email && 
+          !isGenericEmail(email)) {
         
-        // Fallback to Full Name field if email_1_full_name is empty
-        if (i === 1 && !fullName) {
-          fullName = row['Full Name'] || row['full_name'] || '';
-        }
-        
-        if (email && fullName && !isGenericEmail(email)) {
-          if (!validContactsByDomain[groupKey]) {
-            validContactsByDomain[groupKey] = [];
-          }
-          validContactsByDomain[groupKey].push({rowIndex: index, fullName, email});
-          
-          console.log(`Found valid contact: ${email} with name ${fullName} for domain ${groupKey}`);
-        }
-      }
-    });
-    
-    console.log("Valid contacts by domain for other_dm_name assignment:", validContactsByDomain);
-    
-    // Assign other_dm_name using round-robin pattern for each domain
-    Object.entries(validContactsByDomain).forEach(([domain, contacts]) => {
-      if (contacts.length > 1) {
-        contacts.forEach((contact, i) => {
-          // Get the next contact in a circular pattern
-          const nextContact = contacts[(i + 1) % contacts.length];
-          
-          // Make sure we're not assigning a contact to themselves
-          if (nextContact.email !== contact.email) {
-            processedData[contact.rowIndex].other_dm_name = nextContact.fullName;
-            console.log(`Assigned other_dm_name '${nextContact.fullName}' to row with email ${contact.email}`);
-          }
+        validContacts.push({
+          index,
+          fullName,
+          email,
+          domain: effectiveDomain
         });
+        
+        console.log(`Added to validContacts with domain ${effectiveDomain}`);
       }
     });
     
-    // Skip MX provider checks for now due to API issues
-    updateTask(taskId, { progress: 90 });
+    console.log(`Found ${validContacts.length} valid contacts for other_dm_name assignment`);
     
-    // Keep rows with unique emails even if they don't have a domain
-    // Only filter out rows with no emails or where all emails are duplicates
-    processedData = processedData.filter(row => {
-      const email1 = row['email_1']?.toString().toLowerCase() || '';
-      const email2 = row['email_2']?.toString().toLowerCase() || '';
-      const email3 = row['email_3']?.toString().toLowerCase() || '';
-      
-      // If at least one email exists, keep the row unless marked for deletion
-      const hasAtLeastOneEmail = email1.trim() !== '' || email2.trim() !== '' || email3.trim() !== '';
-      
-      return hasAtLeastOneEmail && 
-             row.to_be_deleted !== 'Yes (All Emails Duplicate)' &&
-             row.to_be_deleted !== 'Yes (No Emails)';
+    // Assign other_dm_name using utility function
+    const contactsWithOtherDM = assignOtherDMNames(validContacts);
+    
+    // Update the processed data with the assigned other_dm_names
+    contactsWithOtherDM.forEach(contact => {
+      if (contact.otherDmName) {
+        processedData[contact.index].other_dm_name = contact.otherDmName;
+      }
     });
     
-    console.log(`Final processed data has ${processedData.length} rows`);
-    console.log(`Sample row other_dm_name value:`, processedData.length > 0 ? processedData[0].other_dm_name : 'No rows');
+    // Try to get MX provider info
+    const total = processedData.length;
+    let mxProcessed = 0;
     
-    // Let's log a few example rows to verify other_dm_name is set
-    for (let i = 0; i < Math.min(5, processedData.length); i++) {
-      console.log(`Row ${i} other_dm_name: ${processedData[i].other_dm_name}`);
+    updateTask(taskId, { progress: 70 });
+    
+    for (let i = 0; i < processedData.length; i++) {
+      const row = processedData[i];
+      if (row.cleaned_website) {
+        try {
+          row.mx_provider = await getMxProvider(row.cleaned_website);
+        } catch (error) {
+          console.error(`Failed to get MX provider for ${row.cleaned_website}:`, error);
+          row.mx_provider = 'other';
+        }
+      }
+      
+      mxProcessed++;
+      if (mxProcessed % 10 === 0 || mxProcessed === total) {
+        const progress = Math.min(70 + Math.floor((mxProcessed / total) * 20), 90);
+        updateTask(taskId, { progress });
+      }
     }
     
-    return processedData;
+    // Only filter out rows marked for deletion due to duplicate emails
+    const finalData = processedData.filter(row => {
+      const email = row.email?.toString().toLowerCase() || '';
+      return (email.trim() !== '' && row.to_be_deleted !== 'Yes (Duplicate Email)');
+    });
+    
+    console.log(`Final processed data has ${finalData.length} rows`);
+    
+    // Log a few example rows to verify other_dm_name is set
+    for (let i = 0; i < Math.min(5, finalData.length); i++) {
+      console.log(`Row ${i} other_dm_name: ${finalData[i].other_dm_name}`);
+    }
+    
+    return finalData;
   };
 
   const downloadResult = (taskId: string) => {
