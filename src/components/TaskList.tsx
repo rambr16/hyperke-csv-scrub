@@ -36,6 +36,23 @@ const TaskList = () => {
     return result.some(row => row[columnName] !== undefined);
   };
 
+  // Filter the results for preview
+  const getFilteredPreviewData = (result: Array<Record<string, any>>) => {
+    return result.filter(row => {
+      // Skip filtering if cleaned_website is blank or null
+      if (!row.cleaned_website || row.cleaned_website.trim() === '') {
+        return true; // Keep the row
+      }
+      
+      // If domain_occurrence_count > 6, remove the row
+      if (row.domain_occurrence_count > 6) {
+        return false;
+      }
+      
+      return true; // Keep the row if it passes the checks
+    });
+  };
+
   return (
     <div className="space-y-4">
       {tasks.map((task) => (
@@ -89,7 +106,7 @@ const TaskList = () => {
                   {task.result.length} rows processed
                 </div>
                 
-                {/* Preview of processed data */}
+                {/* Preview of processed data with filtering applied */}
                 <div className="mt-4 border rounded overflow-x-auto">
                   <Table>
                     <TableHeader>
@@ -102,7 +119,7 @@ const TaskList = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {task.result.slice(0, 5).map((row, idx) => (
+                      {getFilteredPreviewData(task.result).slice(0, 5).map((row, idx) => (
                         <TableRow key={idx}>
                           {hasColumn(task.result, 'email') && <TableCell>{row.email || '-'}</TableCell>}
                           {hasColumn(task.result, 'full_name') && <TableCell>{row.full_name || '-'}</TableCell>}
@@ -115,7 +132,7 @@ const TaskList = () => {
                   </Table>
                   {task.result.length > 5 && (
                     <div className="p-2 text-center text-sm text-gray-500">
-                      Showing 5 of {task.result.length} rows. Download for complete data.
+                      Showing 5 of {getFilteredPreviewData(task.result).length} rows. Download for complete data.
                     </div>
                   )}
                 </div>
