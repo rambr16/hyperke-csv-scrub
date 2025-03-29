@@ -421,11 +421,13 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const emailDomain = email.split('@')[1] || '';
       const domainToUse = cleanedDomain || emailDomain;
       
-      // Create the full row object first
+      // Create the full row object first with all properties we'll need later
       const newRow = {
         ...row,
         cleaned_company_name: cleanedCompanyName,
         cleaned_website: domainToUse,
+        mx_provider: '', // Initialize mx_provider property
+        other_dm_name: '', // Initialize other_dm_name property for later use
         to_be_deleted: 'No'
       };
       
@@ -551,11 +553,15 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         cleanedDomain = emailDomain;
       }
       
-      // Create the full row first
+      // Create the full row first with all properties we'll need later
       const newRow = {
         ...row,
         cleaned_company_name: cleanedCompanyName,
         cleaned_website: cleanedDomain,
+        mx_provider_1: '', // Initialize mx provider properties
+        mx_provider_2: '',
+        mx_provider_3: '',
+        other_dm_name: '', // Initialize for later use
         to_be_deleted: 'No'
       };
       
