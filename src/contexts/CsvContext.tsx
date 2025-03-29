@@ -24,36 +24,44 @@ const CsvContext = createContext<CsvContextValue>({
 export const useCsv = () => useContext(CsvContext);
 
 export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { tasks, setTasks, getTask, updateTask, resetTasks } = useCsvTasks();
-  const { addTask, processCsv } = useCsvProcessor(getTask, updateTask);
+  const { tasks, getTask, updateTask, resetTasks, addTask: addTaskToState } = useCsvTasks();
+  const { processCsv } = useCsvProcessor(getTask, updateTask);
   const { downloadResult } = useCsvDownloader(getTask);
 
   // Extend addTask to update tasks state
   const handleAddTask = async (file: File): Promise<string> => {
-    const taskId = await addTask(file);
+    const taskId = Date.now().toString();
     const newTask: Task = {
       id: taskId,
       filename: file.name,
       status: 'pending',
       progress: 0,
-      originalHeaders: [], // This will be populated in the addTask function
-      csvType: 'unknown' // This will be updated in the addTask function
+      originalHeaders: [], 
+      csvType: 'unknown'
     };
     
     // Parse the CSV to get headers and detect CSV type
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        if (results.meta.fields && results.meta.fields.length > 0) {
-          newTask.originalHeaders = results.meta.fields;
-          newTask.csvType = detectCsvType(results.meta.fields);
-          setTasks(prev => [...prev, newTask]);
+    return new Promise((resolve, reject) => {
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => {
+          if (results.meta.fields && results.meta.fields.length > 0) {
+            newTask.originalHeaders = results.meta.fields;
+            newTask.csvType = detectCsvType(results.meta.fields);
+            
+            // Add the task to state
+            addTaskToState(newTask);
+            resolve(taskId);
+          } else {
+            reject(new Error("Invalid CSV file"));
+          }
+        },
+        error: (error) => {
+          reject(error);
         }
-      }
+      });
     });
-    
-    return taskId;
   };
 
   return (

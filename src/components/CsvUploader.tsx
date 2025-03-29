@@ -75,6 +75,7 @@ const CsvUploader = () => {
     
     try {
       const taskId = await addTask(file);
+      
       // Create a hidden input to store the file for later processing
       const fileInput = document.createElement('input');
       fileInput.type = 'file';
@@ -99,6 +100,7 @@ const CsvUploader = () => {
       }
       
       // Navigate to the mapping page
+      console.log("Navigating to mapping page with taskId:", taskId);
       navigate(`/mapping/${taskId}`);
     } catch (error) {
       console.error("Upload error:", error);

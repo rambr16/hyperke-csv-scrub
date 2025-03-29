@@ -19,6 +19,11 @@ export const useCsvTasks = () => {
     );
   };
 
+  const addTask = (task: Task) => {
+    setTasks(prev => [...prev, task]);
+    return task.id;
+  };
+
   const resetTasks = () => {
     setTasks([]);
     toast({
@@ -32,6 +37,7 @@ export const useCsvTasks = () => {
     setTasks,
     getTask,
     updateTask,
+    addTask,
     resetTasks
   };
 };

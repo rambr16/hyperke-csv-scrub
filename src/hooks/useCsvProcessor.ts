@@ -17,48 +17,6 @@ export const useCsvProcessor = (
 ) => {
   const { toast } = useToast();
 
-  const addTask = async (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      Papa.parse(file, {
-        header: true,
-        skipEmptyLines: true,
-        complete: (results) => {
-          if (results.meta.fields && results.meta.fields.length > 0) {
-            const taskId = Date.now().toString();
-            const newTask: Task = {
-              id: taskId,
-              filename: file.name,
-              status: 'pending',
-              progress: 0,
-              originalHeaders: results.meta.fields,
-              csvType: detectCsvType(results.meta.fields)
-            };
-            
-            resolve(taskId);
-            return newTask;
-          } else {
-            toast({
-              variant: "destructive",
-              title: "Invalid CSV",
-              description: "The uploaded file is not a valid CSV or is empty."
-            });
-            reject(new Error("Invalid CSV file"));
-            return null;
-          }
-        },
-        error: (error) => {
-          toast({
-            variant: "destructive",
-            title: "Error parsing CSV",
-            description: error.message
-          });
-          reject(error);
-          return null;
-        }
-      });
-    });
-  };
-
   const processCsv = async (taskId: string, mappedColumns: Record<string, string>) => {
     const task = getTask(taskId);
     if (!task) return;
@@ -188,7 +146,6 @@ export const useCsvProcessor = (
   };
 
   return {
-    addTask,
     processCsv
   };
 };
