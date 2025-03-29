@@ -1,3 +1,4 @@
+
 import React, { createContext, useState, useContext } from 'react';
 import Papa from 'papaparse';
 import { useToast } from "@/components/ui/use-toast";
@@ -12,7 +13,7 @@ import {
   finalizeProcessedData
 } from '@/utils/csvProcessors';
 
-export { CsvType };
+export type { CsvType };
 
 const CsvContext = createContext<CsvContextType>({
   tasks: [],
