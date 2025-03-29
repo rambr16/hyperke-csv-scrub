@@ -69,7 +69,6 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         header: true,
         skipEmptyLines: true,
         complete: (results) => {
-          // Check if the CSV has headers and data
           if (results.meta.fields && results.meta.fields.length > 0) {
             const taskId = Date.now().toString();
             const newTask: Task = {
@@ -125,7 +124,6 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const detectCsvType = (headers: string[]): CsvType => {
-    // Check for domain-only case (has website/domain column but no email)
     const hasWebsite = headers.some(h => 
       h.toLowerCase().includes('website') || 
       h.toLowerCase().includes('domain') || 
@@ -140,7 +138,6 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return 'domain_only';
     }
     
-    // Check for the multiple email case (email_1, email_2, email_3)
     const hasMultipleEmails = emailColumns.some(h => 
       h.includes('email_1') || h.includes('email_2') || h.includes('email_3')
     );
@@ -149,7 +146,6 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return 'multiple_email';
     }
     
-    // Check for single email case
     if (emailColumns.length > 0) {
       return 'single_email';
     }
@@ -161,10 +157,8 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!url) return '';
     
     try {
-      // Remove protocol and www.
       let domain = url.replace(/^(?:https?:\/\/)?(?:www\.)?/i, "");
       
-      // Extract domain.com
       const domainMatch = domain.match(/^([^\/\?#]+)/);
       if (domainMatch && domainMatch[1]) {
         return domainMatch[1].trim();
@@ -181,10 +175,8 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!name) return '';
     
     try {
-      // This is a simplified version of the complex formula in the requirements
       let cleaned = name.toLowerCase();
       
-      // Remove common business suffixes
       cleaned = cleaned
         .replace(/ ltd/g, "")
         .replace(/ llc/g, "")
@@ -198,19 +190,14 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         .replace(/,/g, "")
         .replace(/ technologies/g, "");
       
-      // Remove URLs and file extensions
       cleaned = cleaned.replace(/\.[a-z]+/g, "").replace(/\.$/, "");
       
-      // Remove non-printable characters
       cleaned = cleaned.replace(/[^ -~]/g, "");
       
-      // Proper case
       cleaned = cleaned.replace(/\b\w/g, c => c.toUpperCase());
       
-      // Fix possessives
       cleaned = cleaned.replace(/'S/g, "'s");
       
-      // Remove anything after | or :
       cleaned = cleaned.replace(/\s*[\|:]\s*.*/, "");
       
       return cleaned.trim();
@@ -267,7 +254,6 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
     
     try {
-      // Parse the CSV file again to get the data
       const fileInput = document.getElementById(taskId) as HTMLInputElement;
       if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
         throw new Error("File not found");
@@ -293,7 +279,6 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           
           let processedData: Array<Record<string, any>> = [];
           
-          // Process based on CSV type
           switch (task.csvType) {
             case 'domain_only':
               processedData = await processDomainOnlyCsv(data, mappedColumns, taskId);
@@ -311,7 +296,6 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               throw new Error("Unknown CSV type");
           }
           
-          // Remove columns that should be excluded
           processedData = processedData.map(row => {
             const newRow = { ...row };
             COLUMNS_TO_REMOVE.forEach(column => {
@@ -319,6 +303,12 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             });
             return newRow;
           });
+          
+          processedData = processedData.filter(row => 
+            row.to_be_deleted !== 'Yes (Domain Frequency > 6)' && 
+            row.to_be_deleted !== 'Yes (Duplicate Email)' &&
+            row.to_be_deleted !== 'Yes (All Emails Duplicate)'
+          );
           
           updateTask(taskId, { 
             status: 'completed', 
@@ -363,7 +353,6 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     mappedColumns: Record<string, string>,
     taskId: string
   ): Promise<Array<Record<string, any>>> => {
-    // Get the website column
     const websiteColumn = mappedColumns.website;
     if (!websiteColumn) {
       throw new Error("Website column not mapped");
@@ -372,7 +361,6 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const total = data.length;
     let processed = 0;
     
-    // Process each row
     const processedData = data.map(row => {
       const websiteUrl = row[websiteColumn] || '';
       const cleanedDomain = cleanDomain(websiteUrl);
@@ -398,8 +386,8 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     mappedColumns: Record<string, string>,
     taskId: string
   ): Promise<Array<Record<string, any>>> => {
-    // Get the mapped columns
     const emailColumn = mappedColumns.email;
+    const fullNameColumn = mappedColumns.full_name || 'full_name' || 'name';
     const websiteColumn = mappedColumns.website || '';
     const companyNameColumn = mappedColumns.company || '';
     
@@ -409,53 +397,46 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     updateTask(taskId, { progress: 20 });
     
-    // Step 1: Create full objects with all properties first
-    const uniqueEmails = new Set<string>();
     const processedData = data.map(row => {
       const email = row[emailColumn]?.toLowerCase() || '';
       const cleanedCompanyName = companyNameColumn ? cleanCompanyName(row[companyNameColumn] || '') : '';
       const websiteUrl = websiteColumn ? row[websiteColumn] || '' : '';
       const cleanedDomain = cleanDomain(websiteUrl);
+      const fullName = fullNameColumn ? row[fullNameColumn] || '' : '';
       
-      // Extract domain from email if website is not provided
       const emailDomain = email.split('@')[1] || '';
       const domainToUse = cleanedDomain || emailDomain;
       
-      // Create the full row object first with all properties we'll need later
       return {
         ...row,
         cleaned_company_name: cleanedCompanyName,
         cleaned_website: domainToUse,
-        mx_provider: '', // Initialize mx_provider property
-        other_dm_name: '', // Initialize other_dm_name property for later use
+        mx_provider: '',
+        other_dm_name: '',
         to_be_deleted: 'No',
-        domain_occurrence_count: 0, // Track occurrences
-        email_occurrence: 0 // Track email occurrences
+        domain_occurrence_count: 0,
+        email_occurrence: 0,
+        full_name: fullName
       };
     });
     
     updateTask(taskId, { progress: 30 });
     
-    // Step 2: Mark duplicate emails and calculate domain counts
     const emailIndices: Record<string, number> = {};
-    const domainCounts: Record<string, Array<number>> = {}; // Stores indices of rows with each domain
+    const domainCounts: Record<string, Array<number>> = {};
     
     processedData.forEach((row, index) => {
       const email = row[emailColumn]?.toLowerCase() || '';
       const domain = row.cleaned_website || '';
       
-      // Track email occurrences
       if (email) {
         if (email in emailIndices) {
-          // This is a duplicate email
-          processedData[index].to_be_deleted = 'Yes (Duplicate Email)';
+          row.to_be_deleted = 'Yes (Duplicate Email)';
         } else {
-          // Keep track of first occurrence of this email
           emailIndices[email] = index;
         }
       }
       
-      // Track domain occurrences
       if (domain) {
         if (!domainCounts[domain]) {
           domainCounts[domain] = [];
@@ -464,51 +445,42 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     });
     
-    // Update domain occurrence counts and mark rows with excessive occurrences
     Object.entries(domainCounts).forEach(([domain, indices]) => {
       indices.forEach((index, i) => {
-        // Record the domain_occurrence_count (1-based index)
         processedData[index].domain_occurrence_count = i + 1;
         
-        // Mark for deletion if occurrence count > 6
         if (i + 1 > 6 && processedData[index].to_be_deleted === 'No') {
           processedData[index].to_be_deleted = 'Yes (Domain Frequency > 6)';
         }
       });
     });
     
-    updateTask(taskId, { progress: 60 });
-    
-    // Step 3: Assign other_dm_name for domains with multiple contacts (not marked for deletion)
     Object.entries(domainCounts).forEach(([domain, indices]) => {
-      // Only process domains with multiple valid entries
       if (indices.length > 1) {
         const validIndices = indices.filter(index => 
-          processedData[index].to_be_deleted === 'No' && 
-          !isGenericEmail(processedData[index][emailColumn] || '')
+          processedData[index].to_be_deleted === 'No' &&
+          processedData[index].domain_occurrence_count >= 1 &&
+          processedData[index].domain_occurrence_count <= 6 &&
+          !isGenericEmail(processedData[index][emailColumn] || '') &&
+          processedData[index].full_name
         );
         
-        if (validIndices.length > 1) {
-          // For each valid entry, assign the next valid entry as other_dm_name
-          validIndices.forEach((index, i) => {
-            const nextIndex = validIndices[(i + 1) % validIndices.length];
-            const nextFullName = processedData[nextIndex]['full_name'] || 
-                                processedData[nextIndex]['name'] || '';
-            
-            if (nextFullName) {
-              processedData[index].other_dm_name = nextFullName;
-            }
-          });
-        }
+        validIndices.forEach((index, i) => {
+          const nextIndex = validIndices[(i + 1) % validIndices.length];
+          const nextFullName = processedData[nextIndex].full_name || '';
+          
+          if (nextFullName && nextIndex !== index) {
+            processedData[index].other_dm_name = nextFullName;
+          }
+        });
       }
     });
     
-    updateTask(taskId, { progress: 70 });
-    
-    // Step 4: Process MX records (10 at a time)
     const batchSize = 10;
-    for (let i = 0; i < processedData.length; i += batchSize) {
-      const batch = processedData.slice(i, i + batchSize);
+    const total = processedData.length;
+    
+    for (let i = 0; i < total; i += batchSize) {
+      const batch = processedData.slice(i, Math.min(i + batchSize, total));
       const promises = batch.map(async (row) => {
         const email = row[emailColumn] || '';
         
@@ -524,7 +496,7 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       
       await Promise.all(promises);
       
-      const progress = Math.min(70 + Math.floor(((i + batch.length) / processedData.length) * 20), 90);
+      const progress = Math.min(70 + Math.floor(((i + batch.length) / total) * 20), 90);
       updateTask(taskId, { progress });
     }
     
@@ -536,52 +508,51 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     mappedColumns: Record<string, string>,
     taskId: string
   ): Promise<Array<Record<string, any>>> => {
-    // Get the mapped columns - note that we might have multiple email columns
     const companyNameColumn = mappedColumns.company || '';
     const websiteColumn = mappedColumns.website || '';
     
     updateTask(taskId, { progress: 15 });
     
-    // Step 1: Create full objects with all properties
     const processedData = data.map(row => {
-      // Check for email_1, email_2, email_3
       const email1 = row['email_1'] || '';
       const email2 = row['email_2'] || '';
       const email3 = row['email_3'] || '';
       
-      // Clean company name and website domain
+      const fullName1 = row['email_1_full_name'] || '';
+      const fullName2 = row['email_2_full_name'] || '';
+      const fullName3 = row['email_3_full_name'] || '';
+      
       const cleanedCompanyName = companyNameColumn ? cleanCompanyName(row[companyNameColumn] || '') : '';
       const websiteUrl = websiteColumn ? row[websiteColumn] || '' : '';
       let cleanedDomain = cleanDomain(websiteUrl);
       
-      // If no website, try to extract domain from email
       if (!cleanedDomain && email1) {
         const emailDomain = email1.split('@')[1] || '';
         cleanedDomain = emailDomain;
       }
       
-      // Create the full row first with all properties
       return {
         ...row,
         cleaned_company_name: cleanedCompanyName,
         cleaned_website: cleanedDomain,
-        mx_provider_1: '', // Initialize mx provider properties
+        mx_provider_1: '',
         mx_provider_2: '',
         mx_provider_3: '',
-        other_dm_name: '', // Initialize for later use
+        other_dm_name: '',
         to_be_deleted: 'No',
-        domain_occurrence_count: 0 // Track occurrences
+        domain_occurrence_count: 0,
+        email_1_full_name: fullName1,
+        email_2_full_name: fullName2,
+        email_3_full_name: fullName3
       };
     });
     
     updateTask(taskId, { progress: 30 });
     
-    // Step 2: Track unique emails and domain counts
     const allEmails = new Set<string>();
-    const domainCounts: Record<string, Array<number>> = {}; // Store indices of rows with each domain
+    const domainCounts: Record<string, Array<number>> = {};
     
     processedData.forEach((row, index) => {
-      // Check for unique emails
       const email1 = row['email_1'] || '';
       const email2 = row['email_2'] || '';
       const email3 = row['email_3'] || '';
@@ -603,7 +574,6 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         hasUniqueEmail = true;
       }
       
-      // Mark for deletion if all emails are duplicates or no emails exist
       if (!hasUniqueEmail) {
         if (!email1 && !email2 && !email3) {
           processedData[index].to_be_deleted = 'Yes (No Emails)';
@@ -612,7 +582,6 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
       
-      // Track domain occurrences
       const domain = row.cleaned_website || '';
       if (domain) {
         if (!domainCounts[domain]) {
@@ -622,30 +591,24 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     });
     
-    // Update domain occurrence counts and mark rows with excessive occurrences
     Object.entries(domainCounts).forEach(([domain, indices]) => {
       indices.forEach((index, i) => {
-        // Record the occurrence count (1-based)
         processedData[index].domain_occurrence_count = i + 1;
         
-        // Mark for deletion if occurrence count > 6
         if (i + 1 > 6 && processedData[index].to_be_deleted === 'No') {
           processedData[index].to_be_deleted = 'Yes (Domain Frequency > 6)';
         }
       });
     });
     
-    updateTask(taskId, { progress: 60 });
-    
-    // Step 3: Assign other_dm_name for repeated domains
     Object.entries(domainCounts).forEach(([domain, indices]) => {
-      // Only process domains with multiple valid entries
       const validIndices = indices.filter(index => 
-        processedData[index].to_be_deleted === 'No'
+        processedData[index].to_be_deleted === 'No' &&
+        processedData[index].domain_occurrence_count >= 1 &&
+        processedData[index].domain_occurrence_count <= 6
       );
       
       if (validIndices.length > 1) {
-        // Collect all email and name pairs across valid rows
         const contacts: Array<{rowIndex: number, email: string, fullName: string}> = [];
         
         validIndices.forEach(index => {
@@ -661,36 +624,32 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         });
         
-        // Assign other_dm_name using round-robin
-        if (contacts.length > 1) {
-          contacts.forEach((contact, i) => {
-            // Pick the next contact as alternate (round robin)
-            const nextContact = contacts[(i + 1) % contacts.length];
-            
-            if (nextContact.rowIndex !== contact.rowIndex) {
-              processedData[contact.rowIndex].other_dm_name = nextContact.fullName;
-            }
-          });
-        }
+        contacts.forEach((contact, i) => {
+          const nextContact = contacts[(i + 1) % contacts.length];
+          
+          if (nextContact.rowIndex !== contact.rowIndex && nextContact.fullName) {
+            processedData[contact.rowIndex].other_dm_name = nextContact.fullName;
+          }
+        });
       }
     });
     
-    updateTask(taskId, { progress: 75 });
-    
-    // Step 4: Process MX records for all emails
     const batchSize = 10;
-    for (let i = 0; i < processedData.length; i += batchSize) {
-      const batch = processedData.slice(i, i + batchSize);
+    const total = processedData.length;
+    
+    for (let i = 0; i < total; i += batchSize) {
+      const batch = processedData.slice(i, Math.min(i + batchSize, total));
       const promises = batch.map(async (row) => {
-        // Process all email columns
-        for (let j = 1; j <= 3; j++) {
-          const emailKey = `email_${j}`;
-          const email = row[emailKey] || '';
-          
-          if (email) {
-            const domain = email.split('@')[1] || '';
-            if (domain) {
-              row[`mx_provider_${j}`] = await getMxProvider(domain);
+        if (row.to_be_deleted === 'No') {
+          for (let j = 1; j <= 3; j++) {
+            const emailKey = `email_${j}`;
+            const email = row[emailKey] || '';
+            
+            if (email) {
+              const domain = email.split('@')[1] || '';
+              if (domain) {
+                row[`mx_provider_${j}`] = await getMxProvider(domain);
+              }
             }
           }
         }
@@ -700,7 +659,7 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       
       await Promise.all(promises);
       
-      const progress = Math.min(75 + Math.floor((i + batch.length) / processedData.length * 15), 90);
+      const progress = Math.min(75 + Math.floor((i + batch.length) / total * 15), 90);
       updateTask(taskId, { progress });
     }
     
@@ -718,15 +677,12 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
     
-    // Convert data to CSV
     const csv = Papa.unparse(task.result);
     
-    // Create a blob and download link
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     
-    // Set file name with timestamp
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const filename = `cleaned_${task.filename.replace('.csv', '')}_${timestamp}.csv`;
     
