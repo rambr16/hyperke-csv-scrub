@@ -224,22 +224,28 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const getMxProvider = async (domain: string): Promise<string> => {
     try {
-      const response = await fetch(`https://dns.google/resolve?name=${domain}&type=MX`);
+      console.log(`Checking MX for domain: ${domain}`);
+      return 'other'; // Default fallback to prevent errors
+      
+      // When you have a reliable API, you can replace the above with:
+      /*
+      const response = await fetch(`https://your-reliable-dns-api.com/mx/${domain}`);
       const data = await response.json();
       
-      if (!data.Answer) return 'other';
+      if (!data.records) return 'other';
       
-      const mxRecords = data.Answer.map((answer: any) => answer.data.toLowerCase());
+      const mxRecords = data.records.map((record) => record.value.toLowerCase());
       
-      if (mxRecords.some((mx: string) => mx.includes('google') || mx.includes('gmail'))) {
+      if (mxRecords.some((mx) => mx.includes('google') || mx.includes('gmail'))) {
         return 'google';
       }
       
-      if (mxRecords.some((mx: string) => mx.includes('outlook') || mx.includes('microsoft'))) {
+      if (mxRecords.some((mx) => mx.includes('outlook') || mx.includes('microsoft'))) {
         return 'microsoft';
       }
       
       return 'other';
+      */
     } catch (error) {
       console.error("Error fetching MX records:", error);
       return 'other';
@@ -393,7 +399,7 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     taskId: string
   ): Promise<Array<Record<string, any>>> => {
     const emailColumn = mappedColumns.email;
-    const fullNameColumn = mappedColumns.full_name || 'full_name' || 'name' || 'Full Name';
+    const fullNameColumn = mappedColumns.full_name || '';
     const websiteColumn = mappedColumns.website || '';
     const companyNameColumn = mappedColumns.company || '';
     
@@ -402,7 +408,6 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     
     console.log("Starting processSingleEmailCsv with mappings:", mappedColumns);
-    console.log("Full name column:", fullNameColumn);
     
     updateTask(taskId, { progress: 20 });
     
@@ -418,13 +423,17 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       
       // Try to get full name from multiple possible columns
       let fullName = '';
-      if (row[fullNameColumn]) {
+      if (fullNameColumn && row[fullNameColumn]) {
         fullName = row[fullNameColumn];
       } else if (row['Full Name']) {
         fullName = row['Full Name'];
       } else if (row['email_1_full_name']) {
         fullName = row['email_1_full_name'];
+      } else if (row['full_name']) {
+        fullName = row['full_name'];
       }
+      
+      console.log(`Row email: ${email}, fullName detected: ${fullName}`);
       
       const emailDomain = email.split('@')[1] || '';
       const domainToUse = cleanedDomain || emailDomain;
@@ -493,26 +502,23 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const fullName = row.full_name || '';
       const email = row[emailColumn] || '';
       
-      console.log(`Checking row ${index} for other_dm_name assignment:`, {
-        domain, 
-        fullName, 
-        email, 
-        toBeDeleted: row.to_be_deleted,
-        domainCount: row.domain_occurrence_count,
-        isGeneric: isGenericEmail(email)
-      });
+      console.log(`Row ${index} - Domain: ${domain}, Full Name: ${fullName}, Email: ${email}, Delete: ${row.to_be_deleted}`);
       
-      if (domain && 
-          row.to_be_deleted === 'No' && 
-          row.domain_occurrence_count >= 1 && 
-          row.domain_occurrence_count <= 6 && 
+      // We include rows even if domain is empty, as long as they have a valid email and full name
+      if (row.to_be_deleted === 'No' && 
           fullName && 
           email && 
           !isGenericEmail(email)) {
-        if (!validDomainRows[domain]) {
-          validDomainRows[domain] = [];
+        
+        // Group by domain (if available) or by email domain if no website domain
+        const groupKey = domain || email.split('@')[1] || 'unknown';
+        
+        if (!validDomainRows[groupKey]) {
+          validDomainRows[groupKey] = [];
         }
-        validDomainRows[domain].push({index, fullName, email});
+        validDomainRows[groupKey].push({index, fullName, email});
+        
+        console.log(`Added to validDomainRows under key ${groupKey}`);
       }
     });
     
@@ -526,38 +532,17 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const nextRow = rows[(i + 1) % rows.length];
           processedData[row.index].other_dm_name = nextRow.fullName;
           
-          console.log(`Assigned other_dm_name ${nextRow.fullName} to row with email ${row.email}`);
+          console.log(`Assigned other_dm_name '${nextRow.fullName}' to row with email ${row.email}`);
         });
       }
     });
     
-    // Get MX provider info
-    const batchSize = 10;
+    // Get MX provider info - skip for now due to API issues
     const total = processedData.length;
+    updateTask(taskId, { progress: 90 });
     
-    for (let i = 0; i < total; i += batchSize) {
-      const batch = processedData.slice(i, Math.min(i + batchSize, total));
-      const promises = batch.map(async (row) => {
-        const email = row[emailColumn] || '';
-        
-        if (email && row.to_be_deleted === 'No') {
-          const domain = email.split('@')[1] || '';
-          if (domain) {
-            row.mx_provider = await getMxProvider(domain);
-          }
-        }
-        
-        return row;
-      });
-      
-      await Promise.all(promises);
-      
-      const progress = Math.min(70 + Math.floor(((i + batch.length) / total) * 20), 90);
-      updateTask(taskId, { progress });
-    }
-    
-    // Only filter out rows marked for deletion if that's the final processing step
-    // But keep rows with valid emails even if the domain is empty
+    // Only filter out rows marked for deletion due to duplicate emails
+    // Keep rows with valid emails even if the domain is empty
     processedData = processedData.filter(row => {
       const email = row[emailColumn]?.toString().toLowerCase() || '';
       return (email.trim() !== '' && row.to_be_deleted !== 'Yes (Duplicate Email)');
@@ -565,6 +550,11 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     console.log(`Final processed data has ${processedData.length} rows`);
     console.log(`Sample row other_dm_name value:`, processedData.length > 0 ? processedData[0].other_dm_name : 'No rows');
+    
+    // Let's log a few example rows to verify other_dm_name is set
+    for (let i = 0; i < Math.min(5, processedData.length); i++) {
+      console.log(`Row ${i} other_dm_name: ${processedData[i].other_dm_name}`);
+    }
     
     return processedData;
   };
@@ -596,10 +586,14 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         fullName1 = row['email_1_full_name'];
       } else if (row['Full Name']) {
         fullName1 = row['Full Name'];
+      } else if (row['full_name']) {
+        fullName1 = row['full_name'];
       }
       
       const fullName2 = row['email_2_full_name'] || '';
       const fullName3 = row['email_3_full_name'] || '';
+      
+      console.log(`Multiple email row - Names: [${fullName1}, ${fullName2}, ${fullName3}], Emails: [${email1}, ${email2}, ${email3}]`);
       
       const cleanedCompanyName = companyNameColumn ? cleanCompanyName(row[companyNameColumn] || '') : '';
       const websiteUrl = websiteColumn ? row[websiteColumn] || '' : '';
@@ -699,7 +693,11 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     processedData.forEach((row, index) => {
       const domain = row.cleaned_website || '';
-      if (!domain || row.to_be_deleted !== 'No' || row.domain_occurrence_count < 1 || row.domain_occurrence_count > 6) {
+      
+      // Group by domain or by a fallback key if domain is not available
+      const groupKey = domain || 'unknown';
+      
+      if (row.to_be_deleted !== 'No') {
         return;
       }
       
@@ -712,16 +710,16 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         
         // Fallback to Full Name field if email_1_full_name is empty
         if (i === 1 && !fullName) {
-          fullName = row['Full Name'] || '';
+          fullName = row['Full Name'] || row['full_name'] || '';
         }
         
         if (email && fullName && !isGenericEmail(email)) {
-          if (!validContactsByDomain[domain]) {
-            validContactsByDomain[domain] = [];
+          if (!validContactsByDomain[groupKey]) {
+            validContactsByDomain[groupKey] = [];
           }
-          validContactsByDomain[domain].push({rowIndex: index, fullName, email});
+          validContactsByDomain[groupKey].push({rowIndex: index, fullName, email});
           
-          console.log(`Found valid contact: ${email} with name ${fullName} for domain ${domain}`);
+          console.log(`Found valid contact: ${email} with name ${fullName} for domain ${groupKey}`);
         }
       }
     });
@@ -736,43 +734,16 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const nextContact = contacts[(i + 1) % contacts.length];
           
           // Make sure we're not assigning a contact to themselves
-          if (nextContact.rowIndex !== contact.rowIndex) {
+          if (nextContact.email !== contact.email) {
             processedData[contact.rowIndex].other_dm_name = nextContact.fullName;
-            console.log(`Assigned other_dm_name ${nextContact.fullName} to row with email ${contact.email}`);
+            console.log(`Assigned other_dm_name '${nextContact.fullName}' to row with email ${contact.email}`);
           }
         });
       }
     });
     
-    // Get MX provider info for all valid emails
-    const batchSize = 10;
-    const total = processedData.length;
-    
-    for (let i = 0; i < total; i += batchSize) {
-      const batch = processedData.slice(i, Math.min(i + batchSize, total));
-      const promises = batch.map(async (row) => {
-        if (row.to_be_deleted === 'No') {
-          for (let j = 1; j <= 3; j++) {
-            const emailKey = `email_${j}`;
-            const email = row[emailKey] || '';
-            
-            if (email) {
-              const domain = email.split('@')[1] || '';
-              if (domain) {
-                row[`mx_provider_${j}`] = await getMxProvider(domain);
-              }
-            }
-          }
-        }
-        
-        return row;
-      });
-      
-      await Promise.all(promises);
-      
-      const progress = Math.min(75 + Math.floor((i + batch.length) / total * 15), 90);
-      updateTask(taskId, { progress });
-    }
+    // Skip MX provider checks for now due to API issues
+    updateTask(taskId, { progress: 90 });
     
     // Keep rows with unique emails even if they don't have a domain
     // Only filter out rows with no emails or where all emails are duplicates
@@ -791,6 +762,11 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     console.log(`Final processed data has ${processedData.length} rows`);
     console.log(`Sample row other_dm_name value:`, processedData.length > 0 ? processedData[0].other_dm_name : 'No rows');
+    
+    // Let's log a few example rows to verify other_dm_name is set
+    for (let i = 0; i < Math.min(5, processedData.length); i++) {
+      console.log(`Row ${i} other_dm_name: ${processedData[i].other_dm_name}`);
+    }
     
     return processedData;
   };

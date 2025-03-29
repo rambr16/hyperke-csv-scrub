@@ -85,7 +85,7 @@ const TaskList = () => {
                 </div>
                 
                 {/* Preview of processed data */}
-                <div className="mt-4 border rounded">
+                <div className="mt-4 border rounded overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -101,7 +101,7 @@ const TaskList = () => {
                         <TableRow key={idx}>
                           <TableCell>{row.email || row.email_1 || '-'}</TableCell>
                           <TableCell>{row.full_name || row.email_1_full_name || '-'}</TableCell>
-                          <TableCell>{row.other_dm_name || '-'}</TableCell>
+                          <TableCell className="font-medium">{row.other_dm_name || '-'}</TableCell>
                           <TableCell>{row.cleaned_website || '-'}</TableCell>
                           <TableCell>{row.mx_provider || row.mx_provider_1 || '-'}</TableCell>
                         </TableRow>
