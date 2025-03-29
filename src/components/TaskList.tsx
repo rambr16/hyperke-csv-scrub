@@ -99,11 +99,11 @@ const TaskList = () => {
                     <TableBody>
                       {task.result.slice(0, 5).map((row, idx) => (
                         <TableRow key={idx}>
-                          <TableCell>{row.email || row.email_1 || '-'}</TableCell>
-                          <TableCell>{row.full_name || row.email_1_full_name || '-'}</TableCell>
+                          <TableCell>{row.email || '-'}</TableCell>
+                          <TableCell>{row.full_name || '-'}</TableCell>
                           <TableCell className="font-medium">{row.other_dm_name || '-'}</TableCell>
                           <TableCell>{row.cleaned_website || '-'}</TableCell>
-                          <TableCell>{row.mx_provider || row.mx_provider_1 || '-'}</TableCell>
+                          <TableCell>{row.mx_provider || '-'}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
