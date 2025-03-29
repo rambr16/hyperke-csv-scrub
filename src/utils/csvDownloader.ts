@@ -1,13 +1,28 @@
 
 import Papa from 'papaparse';
 import { Task } from '@/types/csv';
+import { COLUMNS_TO_REMOVE } from '@/utils/csvConstants';
 
 export const downloadCsvResult = (task: Task) => {
   if (!task || !task.result) {
     throw new Error("No processed data found for this task");
   }
   
-  const csv = Papa.unparse(task.result);
+  // Ensure we're working with a clean copy of the data
+  const cleanedData = task.result.map(row => {
+    const cleanRow: Record<string, any> = {};
+    
+    // Only include columns that aren't in the COLUMNS_TO_REMOVE list
+    Object.keys(row).forEach(key => {
+      if (!COLUMNS_TO_REMOVE.includes(key)) {
+        cleanRow[key] = row[key];
+      }
+    });
+    
+    return cleanRow;
+  });
+  
+  const csv = Papa.unparse(cleanedData);
   
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);

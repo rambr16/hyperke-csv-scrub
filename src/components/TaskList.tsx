@@ -31,6 +31,11 @@ const TaskList = () => {
     }
   };
 
+  // Helper function to check if a column exists and has data in the result
+  const hasColumn = (result: Array<Record<string, any>>, columnName: string) => {
+    return result.some(row => row[columnName] !== undefined);
+  };
+
   return (
     <div className="space-y-4">
       {tasks.map((task) => (
@@ -89,21 +94,21 @@ const TaskList = () => {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Email</TableHead>
-                        <TableHead>Full Name</TableHead>
-                        <TableHead>Other DM Name</TableHead>
-                        <TableHead>Domain</TableHead>
-                        <TableHead>MX Provider</TableHead>
+                        {hasColumn(task.result, 'email') && <TableHead>Email</TableHead>}
+                        {hasColumn(task.result, 'full_name') && <TableHead>Full Name</TableHead>}
+                        {hasColumn(task.result, 'other_dm_name') && <TableHead>Other DM Name</TableHead>}
+                        {hasColumn(task.result, 'cleaned_website') && <TableHead>Domain</TableHead>}
+                        {hasColumn(task.result, 'mx_provider') && <TableHead>MX Provider</TableHead>}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {task.result.slice(0, 5).map((row, idx) => (
                         <TableRow key={idx}>
-                          <TableCell>{row.email || '-'}</TableCell>
-                          <TableCell>{row.full_name || '-'}</TableCell>
-                          <TableCell className="font-medium">{row.other_dm_name || '-'}</TableCell>
-                          <TableCell>{row.cleaned_website || '-'}</TableCell>
-                          <TableCell>{row.mx_provider || '-'}</TableCell>
+                          {hasColumn(task.result, 'email') && <TableCell>{row.email || '-'}</TableCell>}
+                          {hasColumn(task.result, 'full_name') && <TableCell>{row.full_name || '-'}</TableCell>}
+                          {hasColumn(task.result, 'other_dm_name') && <TableCell className="font-medium">{row.other_dm_name || '-'}</TableCell>}
+                          {hasColumn(task.result, 'cleaned_website') && <TableCell>{row.cleaned_website || '-'}</TableCell>}
+                          {hasColumn(task.result, 'mx_provider') && <TableCell>{row.mx_provider || '-'}</TableCell>}
                         </TableRow>
                       ))}
                     </TableBody>

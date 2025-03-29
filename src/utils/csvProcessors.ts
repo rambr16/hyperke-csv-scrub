@@ -353,10 +353,16 @@ export const finalizeProcessedData = (
   // Remove unwanted columns and filter out rows marked for deletion
   return processedData
     .map(row => {
-      const newRow = { ...row };
-      COLUMNS_TO_REMOVE.forEach(column => {
-        delete newRow[column];
+      // Create a new object with only the columns we want to keep
+      const newRow: Record<string, any> = {};
+      
+      Object.keys(row).forEach(column => {
+        // Only add columns that aren't in the COLUMNS_TO_REMOVE list
+        if (!COLUMNS_TO_REMOVE.includes(column)) {
+          newRow[column] = row[column];
+        }
       });
+      
       return newRow;
     })
     .filter(row => 
