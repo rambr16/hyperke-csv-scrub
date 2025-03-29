@@ -1,11 +1,10 @@
-
 import React, { createContext, useState, useContext } from 'react';
 import Papa from 'papaparse';
 import { useToast } from "@/components/ui/use-toast";
-import { Task, CsvContextType, CsvType } from '@/types/csv';
+import { Task, CsvContextType } from '@/types/csv';
 import { detectCsvType } from '@/utils/csvTypeDetector';
 import { downloadCsvResult } from '@/utils/csvDownloader';
-import { batchProcessMxLookups } from '@/utils/domainUtils';
+import { batchFetchMxRecords } from '@/utils/mxUtils';
 import { 
   processDomainOnlyCsv, 
   processSingleEmailCsv, 
@@ -13,7 +12,7 @@ import {
   finalizeProcessedData
 } from '@/utils/csvProcessors';
 
-export type { CsvType };
+export type { CsvType } from '@/types/csv';
 
 const CsvContext = createContext<CsvContextType>({
   tasks: [],
@@ -145,30 +144,25 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               throw new Error("Unknown CSV type");
           }
           
-          // Process MX lookups in batches
+          // Process MX lookups in batches - OPTIMIZED VERSION
           updateTask(taskId, { progress: 70, status: 'processing' });
           
-          const domains: string[] = [];
-          
           // Collect all domains for batch processing
-          processedData.forEach(row => {
-            if (row.cleaned_website) {
-              domains.push(row.cleaned_website);
-            }
-          });
+          const domains: string[] = processedData
+            .map(row => row.cleaned_website)
+            .filter(Boolean);
           
-          console.log(`Starting batch MX lookup for ${domains.length} domains`);
+          console.log(`Starting optimized batch MX lookup for ${domains.length} domains`);
           
           try {
-            // Process MX lookups in batches and track progress
-            const mxResults = await batchProcessMxLookups(
+            // Use our improved batch fetching with larger batch size and caching
+            const mxResults = await batchFetchMxRecords(
               domains,
-              10, // process 10 domains at a time
-              (processed, total) => {
-                const progress = 70 + Math.floor((processed / total) * 20);
-                updateTask(taskId, { progress: Math.min(90, progress) });
-              }
+              30, // Increased batch size for fewer API calls
+              // Progress callback removed since our utility handles everything more efficiently
             );
+            
+            console.log(`MX lookup completed for ${Object.keys(mxResults).length} domains`);
             
             // Update processed data with MX results
             processedData = processedData.map(row => {

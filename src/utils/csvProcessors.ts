@@ -3,7 +3,6 @@ import {
   cleanDomain, 
   cleanCompanyName, 
   isGenericEmail,
-  getMxProvider 
 } from '@/utils/domainUtils';
 import {
   assignOtherDMNames,
@@ -183,29 +182,8 @@ export const processSingleEmailCsv = async (
     }
   });
   
-  // Try to get MX provider info
-  const total = processedData.length;
-  let mxProcessed = 0;
-  
-  updateTask(taskId, { progress: 70 });
-  
-  for (let i = 0; i < processedData.length; i++) {
-    const row = processedData[i];
-    if (row.cleaned_website) {
-      try {
-        row.mx_provider = await getMxProvider(row.cleaned_website);
-      } catch (error) {
-        console.error(`Failed to get MX provider for ${row.cleaned_website}:`, error);
-        row.mx_provider = 'other';
-      }
-    }
-    
-    mxProcessed++;
-    if (mxProcessed % 10 === 0 || mxProcessed === total) {
-      const progress = Math.min(70 + Math.floor((mxProcessed / total) * 20), 90);
-      updateTask(taskId, { progress });
-    }
-  }
+  // Remove individual MX lookups - now handled in the context
+  updateTask(taskId, { progress: 50 });
   
   // Only filter out rows marked for deletion due to duplicate emails
   // Keep rows with valid emails even if the domain is empty
@@ -216,11 +194,6 @@ export const processSingleEmailCsv = async (
   
   console.log(`Final processed data has ${processedData.length} rows`);
   console.log(`Sample row other_dm_name value:`, processedData.length > 0 ? processedData[0].other_dm_name : 'No rows');
-  
-  // Log a few example rows to verify other_dm_name is set
-  for (let i = 0; i < Math.min(5, processedData.length); i++) {
-    console.log(`Row ${i} other_dm_name: ${processedData[i].other_dm_name}`);
-  }
   
   return processedData;
 };
@@ -360,29 +333,8 @@ export const processMultipleEmailCsv = async (
     }
   });
   
-  // Try to get MX provider info
-  const total = processedData.length;
-  let mxProcessed = 0;
-  
-  updateTask(taskId, { progress: 70 });
-  
-  for (let i = 0; i < processedData.length; i++) {
-    const row = processedData[i];
-    if (row.cleaned_website) {
-      try {
-        row.mx_provider = await getMxProvider(row.cleaned_website);
-      } catch (error) {
-        console.error(`Failed to get MX provider for ${row.cleaned_website}:`, error);
-        row.mx_provider = 'other';
-      }
-    }
-    
-    mxProcessed++;
-    if (mxProcessed % 10 === 0 || mxProcessed === total) {
-      const progress = Math.min(70 + Math.floor((mxProcessed / total) * 20), 90);
-      updateTask(taskId, { progress });
-    }
-  }
+  // Remove individual MX lookups - now handled in the context
+  updateTask(taskId, { progress: 50 });
   
   // Only filter out rows marked for deletion due to duplicate emails
   const finalData = processedData.filter(row => {
@@ -391,11 +343,6 @@ export const processMultipleEmailCsv = async (
   });
   
   console.log(`Final processed data has ${finalData.length} rows`);
-  
-  // Log a few example rows to verify other_dm_name is set
-  for (let i = 0; i < Math.min(5, finalData.length); i++) {
-    console.log(`Row ${i} other_dm_name: ${finalData[i].other_dm_name}`);
-  }
   
   return finalData;
 };
