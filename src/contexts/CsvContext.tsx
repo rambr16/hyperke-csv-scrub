@@ -1,4 +1,3 @@
-
 import React, { createContext, useState, useContext } from 'react';
 import Papa from 'papaparse';
 import { useToast } from "@/components/ui/use-toast";
@@ -365,7 +364,10 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const total = data.length;
     let processed = 0;
     
-    const processedData = data.map(row => {
+    const processedData = data.filter(row => {
+      const websiteUrl = row[websiteColumn] || '';
+      return websiteUrl.trim() !== '';
+    }).map(row => {
       const websiteUrl = row[websiteColumn] || '';
       const cleanedDomain = cleanDomain(websiteUrl);
       
@@ -399,18 +401,30 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       throw new Error("Email column not mapped");
     }
     
+    console.log("Starting processSingleEmailCsv with mappings:", mappedColumns);
+    console.log("Full name column:", fullNameColumn);
+    
     updateTask(taskId, { progress: 20 });
     
     // First pass: filter out rows with empty email and initialize fields
     let processedData = data.filter(row => {
-      const email = row[emailColumn]?.toLowerCase() || '';
+      const email = row[emailColumn]?.toString().toLowerCase() || '';
       return email.trim() !== '';
     }).map(row => {
-      const email = row[emailColumn]?.toLowerCase() || '';
+      const email = (row[emailColumn] || '').toString().toLowerCase().trim();
       const cleanedCompanyName = companyNameColumn ? cleanCompanyName(row[companyNameColumn] || '') : '';
       const websiteUrl = websiteColumn ? row[websiteColumn] || '' : '';
       const cleanedDomain = cleanDomain(websiteUrl);
-      const fullName = fullNameColumn ? row[fullNameColumn] || '' : '';
+      
+      // Try to get full name from multiple possible columns
+      let fullName = '';
+      if (row[fullNameColumn]) {
+        fullName = row[fullNameColumn];
+      } else if (row['Full Name']) {
+        fullName = row['Full Name'];
+      } else if (row['email_1_full_name']) {
+        fullName = row['email_1_full_name'];
+      }
       
       const emailDomain = email.split('@')[1] || '';
       const domainToUse = cleanedDomain || emailDomain;
@@ -428,6 +442,7 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     });
     
+    console.log(`After initial filtering: ${processedData.length} rows remain`);
     updateTask(taskId, { progress: 30 });
     
     const emailIndices: Record<string, number> = {};
@@ -435,7 +450,7 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     // Second pass: mark duplicates and count domain occurrences
     processedData.forEach((row, index) => {
-      const email = row[emailColumn]?.toLowerCase() || '';
+      const email = row[emailColumn]?.toString().toLowerCase() || '';
       const domain = row.cleaned_website || '';
       
       if (email) {
@@ -475,8 +490,17 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     processedData.forEach((row, index) => {
       const domain = row.cleaned_website || '';
-      const fullName = row.full_name || row[fullNameColumn] || '';
+      const fullName = row.full_name || '';
       const email = row[emailColumn] || '';
+      
+      console.log(`Checking row ${index} for other_dm_name assignment:`, {
+        domain, 
+        fullName, 
+        email, 
+        toBeDeleted: row.to_be_deleted,
+        domainCount: row.domain_occurrence_count,
+        isGeneric: isGenericEmail(email)
+      });
       
       if (domain && 
           row.to_be_deleted === 'No' && 
@@ -492,8 +516,10 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     });
     
+    console.log("Valid domain rows for other_dm_name assignment:", validDomainRows);
+    
     // Assign other_dm_name using round-robin pattern for each domain group
-    Object.values(validDomainRows).forEach(rows => {
+    Object.entries(validDomainRows).forEach(([domain, rows]) => {
       if (rows.length > 1) {
         rows.forEach((row, i) => {
           // Get the next row in a circular pattern
@@ -530,11 +556,15 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updateTask(taskId, { progress });
     }
     
-    // Final filter to remove rows marked for deletion
-    processedData = processedData.filter(row => 
-      row.to_be_deleted !== 'Yes (Domain Frequency > 6)' && 
-      row.to_be_deleted !== 'Yes (Duplicate Email)'
-    );
+    // Only filter out rows marked for deletion if that's the final processing step
+    // But keep rows with valid emails even if the domain is empty
+    processedData = processedData.filter(row => {
+      const email = row[emailColumn]?.toString().toLowerCase() || '';
+      return (email.trim() !== '' && row.to_be_deleted !== 'Yes (Duplicate Email)');
+    });
+    
+    console.log(`Final processed data has ${processedData.length} rows`);
+    console.log(`Sample row other_dm_name value:`, processedData.length > 0 ? processedData[0].other_dm_name : 'No rows');
     
     return processedData;
   };
@@ -547,20 +577,27 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const companyNameColumn = mappedColumns.company || '';
     const websiteColumn = mappedColumns.website || '';
     
+    console.log("Starting processMultipleEmailCsv with mappings:", mappedColumns);
     updateTask(taskId, { progress: 15 });
     
-    // First pass: initialize fields and remove rows with all empty emails
+    // First pass: initialize fields and filter rows with all empty emails
     let processedData = data.filter(row => {
-      const email1 = row['email_1']?.toLowerCase() || '';
-      const email2 = row['email_2']?.toLowerCase() || '';
-      const email3 = row['email_3']?.toLowerCase() || '';
+      const email1 = row['email_1']?.toString().toLowerCase() || '';
+      const email2 = row['email_2']?.toString().toLowerCase() || '';
+      const email3 = row['email_3']?.toString().toLowerCase() || '';
       return email1.trim() !== '' || email2.trim() !== '' || email3.trim() !== '';
     }).map(row => {
-      const email1 = (row['email_1'] || '').toLowerCase().trim();
-      const email2 = (row['email_2'] || '').toLowerCase().trim();
-      const email3 = (row['email_3'] || '').toLowerCase().trim();
+      const email1 = (row['email_1'] || '').toString().toLowerCase().trim();
+      const email2 = (row['email_2'] || '').toString().toLowerCase().trim();
+      const email3 = (row['email_3'] || '').toString().toLowerCase().trim();
       
-      const fullName1 = row['email_1_full_name'] || row['Full Name'] || '';
+      let fullName1 = '';
+      if (row['email_1_full_name']) {
+        fullName1 = row['email_1_full_name'];
+      } else if (row['Full Name']) {
+        fullName1 = row['Full Name'];
+      }
+      
       const fullName2 = row['email_2_full_name'] || '';
       const fullName3 = row['email_3_full_name'] || '';
       
@@ -595,6 +632,7 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     });
     
+    console.log(`After initial filtering: ${processedData.length} rows remain`);
     updateTask(taskId, { progress: 30 });
     
     const allEmails = new Set<string>();
@@ -688,6 +726,8 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     });
     
+    console.log("Valid contacts by domain for other_dm_name assignment:", validContactsByDomain);
+    
     // Assign other_dm_name using round-robin pattern for each domain
     Object.entries(validContactsByDomain).forEach(([domain, contacts]) => {
       if (contacts.length > 1) {
@@ -734,12 +774,23 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updateTask(taskId, { progress });
     }
     
-    // Final filter to remove rows marked for deletion
-    processedData = processedData.filter(row => 
-      row.to_be_deleted !== 'Yes (Domain Frequency > 6)' && 
-      row.to_be_deleted !== 'Yes (All Emails Duplicate)' &&
-      row.to_be_deleted !== 'Yes (No Emails)'
-    );
+    // Keep rows with unique emails even if they don't have a domain
+    // Only filter out rows with no emails or where all emails are duplicates
+    processedData = processedData.filter(row => {
+      const email1 = row['email_1']?.toString().toLowerCase() || '';
+      const email2 = row['email_2']?.toString().toLowerCase() || '';
+      const email3 = row['email_3']?.toString().toLowerCase() || '';
+      
+      // If at least one email exists, keep the row unless marked for deletion
+      const hasAtLeastOneEmail = email1.trim() !== '' || email2.trim() !== '' || email3.trim() !== '';
+      
+      return hasAtLeastOneEmail && 
+             row.to_be_deleted !== 'Yes (All Emails Duplicate)' &&
+             row.to_be_deleted !== 'Yes (No Emails)';
+    });
+    
+    console.log(`Final processed data has ${processedData.length} rows`);
+    console.log(`Sample row other_dm_name value:`, processedData.length > 0 ? processedData[0].other_dm_name : 'No rows');
     
     return processedData;
   };
