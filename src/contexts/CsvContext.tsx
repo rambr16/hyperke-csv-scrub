@@ -409,9 +409,9 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     updateTask(taskId, { progress: 20 });
     
-    // Step 1: Create full objects with all properties first, then mark duplicates
+    // Step 1: Create full objects with all properties first
     const uniqueEmails = new Set<string>();
-    let uniqueData = data.map(row => {
+    const processedData = data.map(row => {
       const email = row[emailColumn]?.toLowerCase() || '';
       const cleanedCompanyName = companyNameColumn ? cleanCompanyName(row[companyNameColumn] || '') : '';
       const websiteUrl = websiteColumn ? row[websiteColumn] || '' : '';
@@ -422,78 +422,84 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const domainToUse = cleanedDomain || emailDomain;
       
       // Create the full row object first with all properties we'll need later
-      const newRow = {
+      return {
         ...row,
         cleaned_company_name: cleanedCompanyName,
         cleaned_website: domainToUse,
         mx_provider: '', // Initialize mx_provider property
         other_dm_name: '', // Initialize other_dm_name property for later use
-        to_be_deleted: 'No'
+        to_be_deleted: 'No',
+        domain_occurrence_count: 0, // Track occurrences
+        email_occurrence: 0 // Track email occurrences
       };
-      
-      // Mark as duplicate if needed
-      if (!email || uniqueEmails.has(email)) {
-        newRow.to_be_deleted = 'Yes (Duplicate Email)';
-      } else {
-        uniqueEmails.add(email);
-      }
-      
-      return newRow;
     });
     
     updateTask(taskId, { progress: 30 });
     
-    // Step 2: Count domain occurrences and mark for deletion if > 6
-    const domainCounts: Record<string, number> = {};
-    uniqueData.forEach(row => {
+    // Step 2: Mark duplicate emails and calculate domain counts
+    const emailIndices: Record<string, number> = {};
+    const domainCounts: Record<string, Array<number>> = {}; // Stores indices of rows with each domain
+    
+    processedData.forEach((row, index) => {
+      const email = row[emailColumn]?.toLowerCase() || '';
       const domain = row.cleaned_website || '';
-      if (domain && row.to_be_deleted === 'No') {
-        domainCounts[domain] = (domainCounts[domain] || 0) + 1;
+      
+      // Track email occurrences
+      if (email) {
+        if (email in emailIndices) {
+          // This is a duplicate email
+          processedData[index].to_be_deleted = 'Yes (Duplicate Email)';
+        } else {
+          // Keep track of first occurrence of this email
+          emailIndices[email] = index;
+        }
+      }
+      
+      // Track domain occurrences
+      if (domain) {
+        if (!domainCounts[domain]) {
+          domainCounts[domain] = [];
+        }
+        domainCounts[domain].push(index);
       }
     });
     
-    uniqueData = uniqueData.map(row => {
-      const domain = row.cleaned_website || '';
-      if (domain && domainCounts[domain] > 6 && row.to_be_deleted === 'No') {
-        return { ...row, to_be_deleted: 'Yes (Domain Frequency > 6)' };
-      }
-      return row;
+    // Update domain occurrence counts and mark rows with excessive occurrences
+    Object.entries(domainCounts).forEach(([domain, indices]) => {
+      indices.forEach((index, i) => {
+        // Record the domain_occurrence_count (1-based index)
+        processedData[index].domain_occurrence_count = i + 1;
+        
+        // Mark for deletion if occurrence count > 6
+        if (i + 1 > 6 && processedData[index].to_be_deleted === 'No') {
+          processedData[index].to_be_deleted = 'Yes (Domain Frequency > 6)';
+        }
+      });
     });
     
     updateTask(taskId, { progress: 60 });
     
-    // Step 3: Assign other_dm_name for repeated domains using round robin
-    const domainGroups: Record<string, Array<{ email: string, fullName: string, row: Record<string, any> }>> = {};
-    
-    // Group rows by domain (only include rows not marked for deletion)
-    uniqueData.forEach(row => {
-      const domain = row.cleaned_website || '';
-      const email = row[emailColumn] || '';
-      const fullName = row['full_name'] || row['name'] || '';
-      
-      if (domain && email && !isGenericEmail(email) && row.to_be_deleted === 'No') {
-        if (!domainGroups[domain]) {
-          domainGroups[domain] = [];
-        }
+    // Step 3: Assign other_dm_name for domains with multiple contacts (not marked for deletion)
+    Object.entries(domainCounts).forEach(([domain, indices]) => {
+      // Only process domains with multiple valid entries
+      if (indices.length > 1) {
+        const validIndices = indices.filter(index => 
+          processedData[index].to_be_deleted === 'No' && 
+          !isGenericEmail(processedData[index][emailColumn] || '')
+        );
         
-        domainGroups[domain].push({ email, fullName, row });
-      }
-    });
-    
-    // Assign other_dm_name using round robin for each domain group with more than 1 entry
-    Object.keys(domainGroups).forEach(domain => {
-      const group = domainGroups[domain];
-      
-      if (group.length > 1) {
-        group.forEach((item, index) => {
-          // Pick the next person in the group as the alternate (round robin)
-          const nextIndex = (index + 1) % group.length;
-          const alternateContact = group[nextIndex];
-          
-          if (alternateContact.fullName) {
-            item.row.other_dm_name = alternateContact.fullName;
-          }
-        });
+        if (validIndices.length > 1) {
+          // For each valid entry, assign the next valid entry as other_dm_name
+          validIndices.forEach((index, i) => {
+            const nextIndex = validIndices[(i + 1) % validIndices.length];
+            const nextFullName = processedData[nextIndex]['full_name'] || 
+                                processedData[nextIndex]['name'] || '';
+            
+            if (nextFullName) {
+              processedData[index].other_dm_name = nextFullName;
+            }
+          });
+        }
       }
     });
     
@@ -501,14 +507,16 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     // Step 4: Process MX records (10 at a time)
     const batchSize = 10;
-    for (let i = 0; i < uniqueData.length; i += batchSize) {
-      const batch = uniqueData.slice(i, i + batchSize);
+    for (let i = 0; i < processedData.length; i += batchSize) {
+      const batch = processedData.slice(i, i + batchSize);
       const promises = batch.map(async (row) => {
         const email = row[emailColumn] || '';
-        const domain = email.split('@')[1] || '';
         
-        if (domain) {
-          row.mx_provider = await getMxProvider(domain);
+        if (email) {
+          const domain = email.split('@')[1] || '';
+          if (domain) {
+            row.mx_provider = await getMxProvider(domain);
+          }
         }
         
         return row;
@@ -516,11 +524,11 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       
       await Promise.all(promises);
       
-      const progress = Math.min(70 + Math.floor(((i + batch.length) / uniqueData.length) * 20), 90);
+      const progress = Math.min(70 + Math.floor(((i + batch.length) / processedData.length) * 20), 90);
       updateTask(taskId, { progress });
     }
     
-    return uniqueData;
+    return processedData;
   };
 
   const processMultipleEmailCsv = async (
@@ -534,9 +542,8 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     updateTask(taskId, { progress: 15 });
     
-    // Step 1: Create full objects, then mark duplicates
-    const allEmails = new Set<string>();
-    let processedData = data.map(row => {
+    // Step 1: Create full objects with all properties
+    const processedData = data.map(row => {
       // Check for email_1, email_2, email_3
       const email1 = row['email_1'] || '';
       const email2 = row['email_2'] || '';
@@ -553,8 +560,8 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         cleanedDomain = emailDomain;
       }
       
-      // Create the full row first with all properties we'll need later
-      const newRow = {
+      // Create the full row first with all properties
+      return {
         ...row,
         cleaned_company_name: cleanedCompanyName,
         cleaned_website: cleanedDomain,
@@ -562,132 +569,116 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         mx_provider_2: '',
         mx_provider_3: '',
         other_dm_name: '', // Initialize for later use
-        to_be_deleted: 'No'
+        to_be_deleted: 'No',
+        domain_occurrence_count: 0 // Track occurrences
       };
+    });
+    
+    updateTask(taskId, { progress: 30 });
+    
+    // Step 2: Track unique emails and domain counts
+    const allEmails = new Set<string>();
+    const domainCounts: Record<string, Array<number>> = {}; // Store indices of rows with each domain
+    
+    processedData.forEach((row, index) => {
+      // Check for unique emails
+      const email1 = row['email_1'] || '';
+      const email2 = row['email_2'] || '';
+      const email3 = row['email_3'] || '';
       
-      // Check if all emails are duplicates
-      let allDuplicates = true;
+      let hasUniqueEmail = false;
       
       if (email1 && !allEmails.has(email1)) {
         allEmails.add(email1);
-        allDuplicates = false;
+        hasUniqueEmail = true;
       }
       
       if (email2 && !allEmails.has(email2)) {
         allEmails.add(email2);
-        allDuplicates = false;
+        hasUniqueEmail = true;
       }
       
       if (email3 && !allEmails.has(email3)) {
         allEmails.add(email3);
-        allDuplicates = false;
+        hasUniqueEmail = true;
       }
       
       // Mark for deletion if all emails are duplicates or no emails exist
-      if (allDuplicates || (!email1 && !email2 && !email3)) {
-        newRow.to_be_deleted = 'Yes (All Emails Duplicate or No Emails)';
-      }
-      
-      return newRow;
-    });
-    
-    updateTask(taskId, { progress: 45 });
-    
-    // Step 2: Count domain occurrences and mark if > 5
-    const domainCounts: Record<string, number> = {};
-    processedData.forEach(row => {
-      if (row.to_be_deleted === 'No') {
-        const domain = row.cleaned_website || '';
-        if (domain) {
-          domainCounts[domain] = (domainCounts[domain] || 0) + 1;
+      if (!hasUniqueEmail) {
+        if (!email1 && !email2 && !email3) {
+          processedData[index].to_be_deleted = 'Yes (No Emails)';
+        } else {
+          processedData[index].to_be_deleted = 'Yes (All Emails Duplicate)';
         }
       }
+      
+      // Track domain occurrences
+      const domain = row.cleaned_website || '';
+      if (domain) {
+        if (!domainCounts[domain]) {
+          domainCounts[domain] = [];
+        }
+        domainCounts[domain].push(index);
+      }
     });
     
-    processedData = processedData.map(row => {
-      const domain = row.cleaned_website || '';
-      if (domain && domainCounts[domain] > 5 && row.to_be_deleted === 'No') {
-        return { ...row, to_be_deleted: 'Yes (Domain Frequency > 5)' };
-      }
-      return row;
+    // Update domain occurrence counts and mark rows with excessive occurrences
+    Object.entries(domainCounts).forEach(([domain, indices]) => {
+      indices.forEach((index, i) => {
+        // Record the occurrence count (1-based)
+        processedData[index].domain_occurrence_count = i + 1;
+        
+        // Mark for deletion if occurrence count > 6
+        if (i + 1 > 6 && processedData[index].to_be_deleted === 'No') {
+          processedData[index].to_be_deleted = 'Yes (Domain Frequency > 6)';
+        }
+      });
     });
     
     updateTask(taskId, { progress: 60 });
     
-    // Step 3: Process other_dm_name for repeated domains
-    const domainGroups: Record<string, Array<{
-      row: Record<string, any>,
-      emails: Array<{ email: string, fullName: string }>
-    }>> = {};
-    
-    // Group rows by domain and collect emails + full names (only include rows not marked for deletion)
-    processedData.forEach(row => {
-      if (row.to_be_deleted !== 'No') return;
+    // Step 3: Assign other_dm_name for repeated domains
+    Object.entries(domainCounts).forEach(([domain, indices]) => {
+      // Only process domains with multiple valid entries
+      const validIndices = indices.filter(index => 
+        processedData[index].to_be_deleted === 'No'
+      );
       
-      const domain = row.cleaned_website || '';
-      if (!domain) return;
-      
-      if (!domainGroups[domain]) {
-        domainGroups[domain] = [];
-      }
-      
-      const emails: Array<{ email: string, fullName: string }> = [];
-      
-      ['1', '2', '3'].forEach(num => {
-        const email = row[`email_${num}`] || '';
-        const fullName = row[`email_${num}_full_name`] || '';
+      if (validIndices.length > 1) {
+        // Collect all email and name pairs across valid rows
+        const contacts: Array<{rowIndex: number, email: string, fullName: string}> = [];
         
-        if (email && fullName && !isGenericEmail(email)) {
-          emails.push({ email, fullName });
+        validIndices.forEach(index => {
+          const row = processedData[index];
+          
+          for (let i = 1; i <= 3; i++) {
+            const email = row[`email_${i}`] || '';
+            const fullName = row[`email_${i}_full_name`] || '';
+            
+            if (email && fullName && !isGenericEmail(email)) {
+              contacts.push({rowIndex: index, email, fullName});
+            }
+          }
+        });
+        
+        // Assign other_dm_name using round-robin
+        if (contacts.length > 1) {
+          contacts.forEach((contact, i) => {
+            // Pick the next contact as alternate (round robin)
+            const nextContact = contacts[(i + 1) % contacts.length];
+            
+            if (nextContact.rowIndex !== contact.rowIndex) {
+              processedData[contact.rowIndex].other_dm_name = nextContact.fullName;
+            }
+          });
         }
-      });
-      
-      if (emails.length > 0) {
-        domainGroups[domain].push({ row, emails });
-      }
-    });
-    
-    // Assign other_dm_name using round robin
-    Object.keys(domainGroups).forEach(domain => {
-      const group = domainGroups[domain];
-      
-      if (group.length > 1) {
-        // Collect all email-fullName pairs across all rows
-        const allEmailFullNames: Array<{ email: string, fullName: string }> = [];
-        group.forEach(item => {
-          item.emails.forEach(emailData => {
-            allEmailFullNames.push(emailData);
-          });
-        });
-        
-        if (allEmailFullNames.length <= 1) return;
-        
-        // Assign alternates
-        group.forEach(item => {
-          item.emails.forEach((emailData, idx) => {
-            // Find an alternate that's not from this email
-            let alternateIdx = (allEmailFullNames.findIndex(e => e.email === emailData.email) + 1) % allEmailFullNames.length;
-            
-            // Make sure we don't pick ourselves
-            while (allEmailFullNames[alternateIdx].email === emailData.email) {
-              alternateIdx = (alternateIdx + 1) % allEmailFullNames.length;
-            }
-            
-            // For the primary email (email_1), set the other_dm_name on the row
-            if (idx === 0 || item.row['email_1'] === emailData.email) {
-              item.row.other_dm_name = allEmailFullNames[alternateIdx].fullName;
-            }
-          });
-        });
       }
     });
     
     updateTask(taskId, { progress: 75 });
     
-    // Step 4: Process MX records (10 at a time)
+    // Step 4: Process MX records for all emails
     const batchSize = 10;
-    let processedEmails = 0;
-    
     for (let i = 0; i < processedData.length; i += batchSize) {
       const batch = processedData.slice(i, i + batchSize);
       const promises = batch.map(async (row) => {
@@ -700,7 +691,6 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const domain = email.split('@')[1] || '';
             if (domain) {
               row[`mx_provider_${j}`] = await getMxProvider(domain);
-              processedEmails++;
             }
           }
         }
