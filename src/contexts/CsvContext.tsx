@@ -1,4 +1,3 @@
-
 import React, { createContext, useState, useContext } from 'react';
 import Papa from 'papaparse';
 import { useToast } from "@/components/ui/use-toast";
@@ -386,7 +385,8 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       
       return {
         ...row,
-        cleaned_website: cleanedDomain
+        cleaned_website: cleanedDomain,
+        to_be_deleted: 'No'
       };
     });
     
@@ -409,45 +409,43 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     updateTask(taskId, { progress: 20 });
     
-    // Step 1: Remove duplicates based on email
+    // Step 1: Create full objects with all properties first, then mark duplicates
     const uniqueEmails = new Set<string>();
     let uniqueData = data.map(row => {
       const email = row[emailColumn]?.toLowerCase() || '';
-      // Mark duplicates instead of removing them
-      if (!email || uniqueEmails.has(email)) {
-        return { ...row, to_be_deleted: 'Yes (Duplicate Email)' };
-      }
-      uniqueEmails.add(email);
-      return { ...row, to_be_deleted: 'No' };
-    });
-    
-    updateTask(taskId, { progress: 30 });
-    
-    // Step 2: Clean company names and website domains
-    uniqueData = uniqueData.map(row => {
       const cleanedCompanyName = companyNameColumn ? cleanCompanyName(row[companyNameColumn] || '') : '';
       const websiteUrl = websiteColumn ? row[websiteColumn] || '' : '';
       const cleanedDomain = cleanDomain(websiteUrl);
       
       // Extract domain from email if website is not provided
-      const email = row[emailColumn] || '';
       const emailDomain = email.split('@')[1] || '';
       const domainToUse = cleanedDomain || emailDomain;
       
-      return {
+      // Create the full row object first
+      const newRow = {
         ...row,
         cleaned_company_name: cleanedCompanyName,
-        cleaned_website: domainToUse
+        cleaned_website: domainToUse,
+        to_be_deleted: 'No'
       };
+      
+      // Mark as duplicate if needed
+      if (!email || uniqueEmails.has(email)) {
+        newRow.to_be_deleted = 'Yes (Duplicate Email)';
+      } else {
+        uniqueEmails.add(email);
+      }
+      
+      return newRow;
     });
     
-    updateTask(taskId, { progress: 50 });
+    updateTask(taskId, { progress: 30 });
     
-    // Step 3: Count domain occurrences and mark for deletion if > 6
+    // Step 2: Count domain occurrences and mark for deletion if > 6
     const domainCounts: Record<string, number> = {};
     uniqueData.forEach(row => {
       const domain = row.cleaned_website || '';
-      if (domain) {
+      if (domain && row.to_be_deleted === 'No') {
         domainCounts[domain] = (domainCounts[domain] || 0) + 1;
       }
     });
@@ -462,7 +460,7 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     updateTask(taskId, { progress: 60 });
     
-    // Step 4: Assign other_dm_name for repeated domains using round robin
+    // Step 3: Assign other_dm_name for repeated domains using round robin
     const domainGroups: Record<string, Array<{ email: string, fullName: string, row: Record<string, any> }>> = {};
     
     // Group rows by domain (only include rows not marked for deletion)
@@ -499,7 +497,7 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     updateTask(taskId, { progress: 70 });
     
-    // Step 5: Process MX records (10 at a time)
+    // Step 4: Process MX records (10 at a time)
     const batchSize = 10;
     for (let i = 0; i < uniqueData.length; i += batchSize) {
       const batch = uniqueData.slice(i, i + batchSize);
@@ -534,13 +532,32 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     updateTask(taskId, { progress: 15 });
     
-    // Step 1: Organize email data and mark duplicates
+    // Step 1: Create full objects, then mark duplicates
     const allEmails = new Set<string>();
     let processedData = data.map(row => {
       // Check for email_1, email_2, email_3
       const email1 = row['email_1'] || '';
       const email2 = row['email_2'] || '';
       const email3 = row['email_3'] || '';
+      
+      // Clean company name and website domain
+      const cleanedCompanyName = companyNameColumn ? cleanCompanyName(row[companyNameColumn] || '') : '';
+      const websiteUrl = websiteColumn ? row[websiteColumn] || '' : '';
+      let cleanedDomain = cleanDomain(websiteUrl);
+      
+      // If no website, try to extract domain from email
+      if (!cleanedDomain && email1) {
+        const emailDomain = email1.split('@')[1] || '';
+        cleanedDomain = emailDomain;
+      }
+      
+      // Create the full row first
+      const newRow = {
+        ...row,
+        cleaned_company_name: cleanedCompanyName,
+        cleaned_website: cleanedDomain,
+        to_be_deleted: 'No'
+      };
       
       // Check if all emails are duplicates
       let allDuplicates = true;
@@ -562,39 +579,15 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       
       // Mark for deletion if all emails are duplicates or no emails exist
       if (allDuplicates || (!email1 && !email2 && !email3)) {
-        return { ...row, to_be_deleted: 'Yes (All Emails Duplicate or No Emails)' };
+        newRow.to_be_deleted = 'Yes (All Emails Duplicate or No Emails)';
       }
       
-      return { ...row, to_be_deleted: 'No' };
-    });
-    
-    updateTask(taskId, { progress: 30 });
-    
-    // Step 2: Clean company names and website domains
-    processedData = processedData.map(row => {
-      const cleanedCompanyName = companyNameColumn ? cleanCompanyName(row[companyNameColumn] || '') : '';
-      const websiteUrl = websiteColumn ? row[websiteColumn] || '' : '';
-      let cleanedDomain = cleanDomain(websiteUrl);
-      
-      // If no website, try to extract domain from email
-      if (!cleanedDomain) {
-        const email1 = row['email_1'] || '';
-        if (email1) {
-          const emailDomain = email1.split('@')[1] || '';
-          cleanedDomain = emailDomain;
-        }
-      }
-      
-      return {
-        ...row,
-        cleaned_company_name: cleanedCompanyName,
-        cleaned_website: cleanedDomain
-      };
+      return newRow;
     });
     
     updateTask(taskId, { progress: 45 });
     
-    // Step 3: Count domain occurrences and mark if > 5
+    // Step 2: Count domain occurrences and mark if > 5
     const domainCounts: Record<string, number> = {};
     processedData.forEach(row => {
       if (row.to_be_deleted === 'No') {
@@ -615,7 +608,7 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     updateTask(taskId, { progress: 60 });
     
-    // Step 4: Process other_dm_name for repeated domains
+    // Step 3: Process other_dm_name for repeated domains
     const domainGroups: Record<string, Array<{
       row: Record<string, any>,
       emails: Array<{ email: string, fullName: string }>
@@ -685,7 +678,7 @@ export const CsvProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     updateTask(taskId, { progress: 75 });
     
-    // Step 5: Process MX records (10 at a time)
+    // Step 4: Process MX records (10 at a time)
     const batchSize = 10;
     let processedEmails = 0;
     
