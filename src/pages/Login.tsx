@@ -9,8 +9,8 @@ import { Label } from '@/components/ui/label';
 import { Eye, EyeOff } from 'lucide-react';
 
 const Login = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('management@eagleinfoservice.com');
+  const [password, setPassword] = useState('eisShared2025!');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuth();
@@ -34,7 +34,7 @@ const Login = () => {
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <Card className="w-full max-w-md shadow-lg">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold text-center text-hyperke-600">
+          <CardTitle className="text-2xl font-bold text-center">
             Hyperke CSV Cleaner
           </CardTitle>
           <CardDescription className="text-center">
@@ -74,7 +74,7 @@ const Login = () => {
                 </button>
               </div>
             </div>
-            <Button type="submit" className="w-full bg-hyperke-600 hover:bg-hyperke-700" disabled={isLoading}>
+            <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700" disabled={isLoading}>
               {isLoading ? 'Signing in...' : 'Sign In'}
             </Button>
           </form>

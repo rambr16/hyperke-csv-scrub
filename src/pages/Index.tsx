@@ -16,7 +16,8 @@ const Index = () => {
     }
   }, [isAuthenticated, navigate]);
 
-  return null;
+  // Return a loading message while redirecting
+  return <div className="min-h-screen flex items-center justify-center">Redirecting...</div>;
 };
 
 export default Index;
