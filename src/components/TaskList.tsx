@@ -53,6 +53,12 @@ const TaskList = () => {
     });
   };
 
+  // Check if cleaned_company_name is longer than 32 characters
+  const isCompanyNameTooLong = (value: string | undefined) => {
+    if (!value) return false;
+    return value.length > 32;
+  };
+
   return (
     <div className="space-y-4">
       {tasks.map((task) => (
@@ -115,6 +121,7 @@ const TaskList = () => {
                         {hasColumn(task.result, 'full_name') && <TableHead>Full Name</TableHead>}
                         {hasColumn(task.result, 'other_dm_name') && <TableHead>Other DM Name</TableHead>}
                         {hasColumn(task.result, 'cleaned_website') && <TableHead>Domain</TableHead>}
+                        {hasColumn(task.result, 'cleaned_company_name') && <TableHead>Company</TableHead>}
                         {hasColumn(task.result, 'mx_provider') && <TableHead>MX Provider</TableHead>}
                       </TableRow>
                     </TableHeader>
@@ -125,6 +132,11 @@ const TaskList = () => {
                           {hasColumn(task.result, 'full_name') && <TableCell>{row.full_name || '-'}</TableCell>}
                           {hasColumn(task.result, 'other_dm_name') && <TableCell className="font-medium">{row.other_dm_name || '-'}</TableCell>}
                           {hasColumn(task.result, 'cleaned_website') && <TableCell>{row.cleaned_website || '-'}</TableCell>}
+                          {hasColumn(task.result, 'cleaned_company_name') && (
+                            <TableCell className={isCompanyNameTooLong(row.cleaned_company_name) ? 'bg-red-100 text-red-800' : ''}>
+                              {row.cleaned_company_name || '-'}
+                            </TableCell>
+                          )}
                           {hasColumn(task.result, 'mx_provider') && <TableCell>{row.mx_provider || '-'}</TableCell>}
                         </TableRow>
                       ))}
