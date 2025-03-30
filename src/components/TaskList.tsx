@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { useCsv } from '@/contexts/CsvContext';
 import { Card } from '@/components/ui/card';
@@ -35,7 +36,7 @@ const TaskList = () => {
     return result.some(row => row[columnName] !== undefined);
   };
 
-  // Filter the results for preview - updated to match downloader logic
+  // Filter the results for preview - matching exactly with downloader logic
   const getFilteredPreviewData = (result: Array<Record<string, any>>) => {
     return result.filter(row => {
       // Only filter out if BOTH conditions are true:
@@ -43,7 +44,7 @@ const TaskList = () => {
       // 2. domain_occurrence_count > 6
       if (row.cleaned_website && 
           row.cleaned_website.trim() !== '' && 
-          row.domain_occurrence_count > 6) {
+          parseInt(row.domain_occurrence_count) > 6) {
         return false; // Remove the row
       }
       

@@ -356,7 +356,7 @@ export const finalizeProcessedData = (
   const filteredData = processedData.filter(row => {
     if (row.cleaned_website && 
         row.cleaned_website.trim() !== '' && 
-        row.domain_occurrence_count > 6) {
+        parseInt(row.domain_occurrence_count) > 6) {
       row.to_be_deleted = 'Yes (Domain Frequency > 6)';
       return false; // Remove the row
     }
