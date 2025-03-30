@@ -33,21 +33,44 @@ export const downloadCsvResult = (task: Task) => {
     // Only include columns that aren't in the COLUMNS_TO_REMOVE list
     Object.keys(row).forEach(key => {
       if (!COLUMNS_TO_REMOVE.includes(key)) {
-        // If this is the company name field and it's too long, mark it 
-        if (key === 'cleaned_company_name' && isCompanyNameTooLong) {
-          cleanRow[key] = `!!TOO_LONG!! ${row[key]}`;
-        } else {
-          cleanRow[key] = row[key];
-        }
+        cleanRow[key] = row[key];
       }
     });
     
     return cleanRow;
   });
   
-  const csv = Papa.unparse(cleanedData);
+  // Prepare the CSV data with HTML styling for too long company names
+  let csvContent = '';
   
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  // Generate the header row
+  if (cleanedData.length > 0) {
+    const headers = Object.keys(cleanedData[0]);
+    csvContent += headers.join(',') + '\n';
+    
+    // Generate data rows with HTML styling for too long company names
+    cleanedData.forEach(row => {
+      const rowValues = headers.map(header => {
+        let value = row[header] || '';
+        
+        // Check if this is the company name column and it's too long
+        if (header === 'cleaned_company_name' && value.length > 32) {
+          // Add HTML styling for red text (will work when opened in Excel or Google Sheets)
+          value = `<span style="color: red">${value}</span>`;
+        }
+        
+        // Escape commas and quotes in the value
+        if (typeof value === 'string' && (value.includes(',') || value.includes('"'))) {
+          return `"${value.replace(/"/g, '""')}"`;
+        }
+        return value;
+      });
+      
+      csvContent += rowValues.join(',') + '\n';
+    });
+  }
+  
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   
