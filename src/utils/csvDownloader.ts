@@ -1,4 +1,3 @@
-
 import Papa from 'papaparse';
 import { Task } from '@/types/csv';
 import { COLUMNS_TO_REMOVE } from '@/utils/csvConstants';
@@ -10,17 +9,17 @@ export const downloadCsvResult = (task: Task) => {
   
   // Filter out rows where cleaned_website is not blank AND domain_occurrence_count > 6
   const filteredData = task.result.filter(row => {
-    // Skip filtering if cleaned_website is blank or null
-    if (!row.cleaned_website || row.cleaned_website.trim() === '') {
-      return true; // Keep the row
+    // Always keep rows with unique emails regardless of domain count
+    // Only filter out if BOTH conditions are true:
+    // 1. cleaned_website is not blank/null AND 
+    // 2. domain_occurrence_count > 6
+    if (row.cleaned_website && 
+        row.cleaned_website.trim() !== '' && 
+        row.domain_occurrence_count > 6) {
+      return false; // Remove the row
     }
     
-    // If domain_occurrence_count > 6, remove the row
-    if (row.domain_occurrence_count > 6) {
-      return false;
-    }
-    
-    return true; // Keep the row if it passes the checks
+    return true; // Keep all other rows
   });
   
   // Ensure we're working with a clean copy of the data

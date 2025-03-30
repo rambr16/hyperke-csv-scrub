@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { useCsv } from '@/contexts/CsvContext';
 import { Card } from '@/components/ui/card';
@@ -36,20 +35,19 @@ const TaskList = () => {
     return result.some(row => row[columnName] !== undefined);
   };
 
-  // Filter the results for preview
+  // Filter the results for preview - updated to match downloader logic
   const getFilteredPreviewData = (result: Array<Record<string, any>>) => {
     return result.filter(row => {
-      // Skip filtering if cleaned_website is blank or null
-      if (!row.cleaned_website || row.cleaned_website.trim() === '') {
-        return true; // Keep the row
+      // Only filter out if BOTH conditions are true:
+      // 1. cleaned_website is not blank/null AND
+      // 2. domain_occurrence_count > 6
+      if (row.cleaned_website && 
+          row.cleaned_website.trim() !== '' && 
+          row.domain_occurrence_count > 6) {
+        return false; // Remove the row
       }
       
-      // If domain_occurrence_count > 6, remove the row
-      if (row.domain_occurrence_count > 6) {
-        return false;
-      }
-      
-      return true; // Keep the row if it passes the checks
+      return true; // Keep all other rows
     });
   };
 

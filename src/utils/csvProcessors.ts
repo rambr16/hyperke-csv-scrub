@@ -1,4 +1,3 @@
-
 import { Task } from '@/types/csv';
 import { 
   cleanDomain, 
@@ -351,20 +350,18 @@ export const processMultipleEmailCsv = async (
 export const finalizeProcessedData = (
   processedData: Array<Record<string, any>>
 ): Array<Record<string, any>> => {
-  // Filter out rows where cleaned_website is not blank AND domain_occurrence_count > 6
+  // Filter out rows where BOTH conditions are true:
+  // 1. cleaned_website is not blank/null AND
+  // 2. domain_occurrence_count > 6
   const filteredData = processedData.filter(row => {
-    // Skip filtering if cleaned_website is blank or null
-    if (!row.cleaned_website || row.cleaned_website.trim() === '') {
-      return true; // Keep the row
-    }
-    
-    // If domain_occurrence_count > 6, mark for deletion
-    if (row.domain_occurrence_count > 6) {
+    if (row.cleaned_website && 
+        row.cleaned_website.trim() !== '' && 
+        row.domain_occurrence_count > 6) {
       row.to_be_deleted = 'Yes (Domain Frequency > 6)';
       return false; // Remove the row
     }
     
-    return true; // Keep the row if it passes the checks
+    return true; // Keep all other rows
   });
 
   // Remove unwanted columns and filter out rows marked for deletion
