@@ -27,10 +27,18 @@ export const downloadCsvResult = (task: Task) => {
   const cleanedData = filteredData.map(row => {
     const cleanRow: Record<string, any> = {};
     
+    // Check if company name is too long (more than 32 characters)
+    const isCompanyNameTooLong = row.cleaned_company_name && row.cleaned_company_name.length > 32;
+    
     // Only include columns that aren't in the COLUMNS_TO_REMOVE list
     Object.keys(row).forEach(key => {
       if (!COLUMNS_TO_REMOVE.includes(key)) {
-        cleanRow[key] = row[key];
+        // If this is the company name field and it's too long, mark it 
+        if (key === 'cleaned_company_name' && isCompanyNameTooLong) {
+          cleanRow[key] = `!!TOO_LONG!! ${row[key]}`;
+        } else {
+          cleanRow[key] = row[key];
+        }
       }
     });
     
