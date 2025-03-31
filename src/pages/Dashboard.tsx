@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCsv } from '@/contexts/CsvContext';
 import { Button } from '@/components/ui/button';
-import { LogOut, RefreshCw, Upload, ExternalLink } from 'lucide-react';
+import { LogOut, RefreshCw, Upload, ExternalLink, BarChart } from 'lucide-react';
 import CsvUploader from '@/components/CsvUploader';
 import TaskList from '@/components/TaskList';
 
@@ -26,6 +26,10 @@ const Dashboard = () => {
     window.open('https://splitcsv.netlify.app', '_blank');
   };
 
+  const handleHyperkeReportClick = () => {
+    window.open('https://hyperke-report.netlify.app/', '_blank');
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white shadow-sm p-4">
@@ -39,6 +43,14 @@ const Dashboard = () => {
             >
               <ExternalLink size={16} />
               CSV Splitter
+            </Button>
+            <Button 
+              variant="outline" 
+              className="flex items-center gap-1"
+              onClick={handleHyperkeReportClick}
+            >
+              <BarChart size={16} />
+              Hyperke Report
             </Button>
             <Button 
               variant="outline" 
