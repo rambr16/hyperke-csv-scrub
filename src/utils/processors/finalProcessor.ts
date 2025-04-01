@@ -1,3 +1,4 @@
+
 import { COLUMNS_TO_REMOVE } from '@/utils/csvConstants';
 
 export const finalizeProcessedData = (
@@ -24,13 +25,19 @@ export const finalizeProcessedData = (
       const newRow: Record<string, any> = {};
       
       Object.keys(row).forEach(column => {
-        // Check if this is an email column we should preserve (like email_1_first_name)
-        const isEmailInfoColumn = column.startsWith('email_') && 
-          (column.includes('_full_name') || 
-           column.includes('_first_name') || 
-           column.includes('_last_name') || 
-           column.includes('_title') || 
-           column.includes('_phone'));
+        // Check if this is an email column we should preserve
+        const isEmailInfoColumn = 
+          column === 'full_name' || 
+          column === 'first_name' || 
+          column === 'last_name' || 
+          column === 'title' || 
+          column === 'phone' ||
+          (column.startsWith('email_') && 
+            (column.includes('_full_name') || 
+             column.includes('_first_name') || 
+             column.includes('_last_name') || 
+             column.includes('_title') || 
+             column.includes('_phone')));
            
         // Only add columns that aren't in the COLUMNS_TO_REMOVE list 
         // or are email information columns we want to preserve
