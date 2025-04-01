@@ -1,4 +1,3 @@
-
 import { COLUMNS_TO_REMOVE } from '@/utils/csvConstants';
 
 export const finalizeProcessedData = (
@@ -18,39 +17,37 @@ export const finalizeProcessedData = (
     return true; // Keep all other rows
   });
 
-  // Remove unwanted columns and filter out rows marked for deletion
-  return filteredData
-    .map(row => {
-      // Create a new object with only the columns we want to keep
-      const newRow: Record<string, any> = {};
+  // Create a new array with the modified rows
+  const finalData = filteredData.map(row => {
+    // Create a new object with only the columns we want to keep
+    const newRow: Record<string, any> = {};
+    
+    Object.keys(row).forEach(column => {
+      // Check if this is an email column we should preserve
+      const isEmailRelatedColumn = 
+        column === 'email' ||
+        column === 'full_name' || 
+        column === 'first_name' || 
+        column === 'last_name' || 
+        column === 'title' || 
+        column === 'phone' ||
+        column.startsWith('email_');  // Keep ALL email_X columns including email_1, email_2, etc.
       
-      Object.keys(row).forEach(column => {
-        // Check if this is an email column we should preserve
-        const isEmailInfoColumn = 
-          column === 'full_name' || 
-          column === 'first_name' || 
-          column === 'last_name' || 
-          column === 'title' || 
-          column === 'phone' ||
-          (column.startsWith('email_') && 
-            (column.includes('_full_name') || 
-             column.includes('_first_name') || 
-             column.includes('_last_name') || 
-             column.includes('_title') || 
-             column.includes('_phone')));
-           
-        // Only add columns that aren't in the COLUMNS_TO_REMOVE list 
-        // or are email information columns we want to preserve
-        if (!COLUMNS_TO_REMOVE.includes(column) || isEmailInfoColumn) {
-          newRow[column] = row[column];
-        }
-      });
-      
-      return newRow;
-    })
-    .filter(row => 
-      row.to_be_deleted !== 'Yes (Domain Frequency > 6)' && 
-      row.to_be_deleted !== 'Yes (Duplicate Email)' &&
-      row.to_be_deleted !== 'Yes (All Emails Duplicate)'
-    );
+      // Only add columns that aren't in the COLUMNS_TO_REMOVE list 
+      // or are email information columns we want to preserve
+      if (!COLUMNS_TO_REMOVE.includes(column) || isEmailRelatedColumn) {
+        newRow[column] = row[column];
+      }
+    });
+    
+    return newRow;
+  })
+  // Filter out rows marked for deletion
+  .filter(row => 
+    row.to_be_deleted !== 'Yes (Domain Frequency > 6)' && 
+    row.to_be_deleted !== 'Yes (Duplicate Email)' &&
+    row.to_be_deleted !== 'Yes (All Emails Duplicate)'
+  );
+  
+  return finalData;
 };

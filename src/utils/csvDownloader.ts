@@ -1,4 +1,3 @@
-
 import Papa from 'papaparse';
 import { Task } from '@/types/csv';
 import { COLUMNS_TO_REMOVE } from '@/utils/csvConstants';
@@ -22,41 +21,53 @@ export const downloadCsvResult = (task: Task) => {
     return true; // Keep all other rows
   });
   
-  // Ensure we're working with a clean copy of the data
-  const cleanedData = filteredData.map(row => {
-    const cleanRow: Record<string, any> = {};
+  // Prepare the data for CSV export
+  const exportData = filteredData.map(row => {
+    const exportRow: Record<string, any> = {};
     
-    // Only include columns that aren't in the COLUMNS_TO_REMOVE list
-    Object.keys(row).forEach(key => {
+    // Process each column in the row
+    for (const key of Object.keys(row)) {
       // Check if this is an email-related column we want to preserve
-      const isEmailInfoColumn = 
+      const isEmailRelatedColumn = 
+        key === 'email' ||
         key === 'full_name' || 
         key === 'first_name' || 
         key === 'last_name' || 
         key === 'title' || 
         key === 'phone' ||
-        (key.startsWith('email_') && 
-          (key.includes('_full_name') || 
-           key.includes('_first_name') || 
-           key.includes('_last_name') || 
-           key.includes('_title') || 
-           key.includes('_phone')));
+        key.startsWith('email_');  // Keep ALL email_X columns including email_1, email_2, etc.
       
-      // Keep if it's not in COLUMNS_TO_REMOVE or if it's an email info column we want to preserve
-      if (!COLUMNS_TO_REMOVE.includes(key) || isEmailInfoColumn) {
+      // Keep the column if:
+      // 1. It's not in COLUMNS_TO_REMOVE, OR
+      // 2. It's an email-related column we want to preserve
+      if (!COLUMNS_TO_REMOVE.includes(key) || isEmailRelatedColumn) {
         // If this is the company name field and it's too long, prefix with !!TOO_LONG!!
         if (key === 'cleaned_company_name' && row[key] && row[key].length > 32) {
-          cleanRow[key] = `!!TOO_LONG!! ${row[key]}`;
+          exportRow[key] = `!!TOO_LONG!! ${row[key]}`;
         } else {
-          cleanRow[key] = row[key];
+          exportRow[key] = row[key];
+        }
+        
+        // For debugging
+        if (key === 'full_name' || key === 'first_name' || key === 'last_name' || key === 'title' || 
+            key.includes('_full_name') || key.includes('_first_name') || 
+            key.includes('_last_name') || key.includes('_title')) {
+          console.log(`Including in export: ${key} = ${row[key]}`);
         }
       }
-    });
+    }
     
-    return cleanRow;
+    return exportRow;
   });
   
-  const csv = Papa.unparse(cleanedData);
+  console.log(`Export data includes ${exportData.length} rows`);
+  
+  // Sample the columns in the first row for debugging
+  if (exportData.length > 0) {
+    console.log('Columns in export:', Object.keys(exportData[0]));
+  }
+  
+  const csv = Papa.unparse(exportData);
   
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
