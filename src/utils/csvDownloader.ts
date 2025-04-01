@@ -1,3 +1,4 @@
+
 import Papa from 'papaparse';
 import { Task } from '@/types/csv';
 import { COLUMNS_TO_REMOVE } from '@/utils/csvConstants';
@@ -27,32 +28,34 @@ export const downloadCsvResult = (task: Task) => {
     
     // Process each column in the row
     for (const key of Object.keys(row)) {
-      // Check if this is an email-related column we want to preserve
-      const isEmailRelatedColumn = 
+      // Define critical columns that must be preserved
+      const isCriticalColumn = 
         key === 'email' ||
         key === 'full_name' || 
         key === 'first_name' || 
         key === 'last_name' || 
         key === 'title' || 
         key === 'phone' ||
-        key.startsWith('email_');  // Keep ALL email_X columns including email_1, email_2, etc.
+        key === 'other_dm_name' ||
+        key === 'mx_provider' ||
+        key === 'cleaned_website' ||
+        key === 'cleaned_company_name' ||
+        key.startsWith('email_');  // Keep ALL email_X columns
       
       // Keep the column if:
       // 1. It's not in COLUMNS_TO_REMOVE, OR
-      // 2. It's an email-related column we want to preserve
-      if (!COLUMNS_TO_REMOVE.includes(key) || isEmailRelatedColumn) {
+      // 2. It's a critical column we must preserve
+      if (!COLUMNS_TO_REMOVE.includes(key) || isCriticalColumn) {
+        // For debugging name fields
+        if (key === 'first_name' || key === 'last_name') {
+          console.log(`CSV Export including: ${key} = ${row[key]}`);
+        }
+        
         // If this is the company name field and it's too long, prefix with !!TOO_LONG!!
         if (key === 'cleaned_company_name' && row[key] && row[key].length > 32) {
           exportRow[key] = `!!TOO_LONG!! ${row[key]}`;
         } else {
           exportRow[key] = row[key];
-        }
-        
-        // For debugging
-        if (key === 'full_name' || key === 'first_name' || key === 'last_name' || key === 'title' || 
-            key.includes('_full_name') || key.includes('_first_name') || 
-            key.includes('_last_name') || key.includes('_title')) {
-          console.log(`Including in export: ${key} = ${row[key]}`);
         }
       }
     }
@@ -65,6 +68,8 @@ export const downloadCsvResult = (task: Task) => {
   // Sample the columns in the first row for debugging
   if (exportData.length > 0) {
     console.log('Columns in export:', Object.keys(exportData[0]));
+    console.log('First name in export:', exportData[0].first_name);
+    console.log('Last name in export:', exportData[0].last_name);
   }
   
   const csv = Papa.unparse(exportData);

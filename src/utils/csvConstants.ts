@@ -1,8 +1,9 @@
 // Columns to remove in output CSV
 export const COLUMNS_TO_REMOVE = [
-  // We're keeping all email-related columns now
-  // Keep: email, full_name, first_name, last_name, title, phone
-  // Keep: email_1, email_1_full_name, email_1_first_name, email_1_last_name, email_1_title, email_1_phone, etc.
+  // DO NOT INCLUDE these fields here as we want to keep them:
+  // 'email', 'full_name', 'first_name', 'last_name', 'title', 'phone',
+  // 'email_1', 'email_1_full_name', 'email_1_first_name', 'email_1_last_name', 'email_1_title', 'email_1_phone', etc.
+  // 'other_dm_name', 'mx_provider', 'cleaned_website', 'cleaned_company_name'
   
   // Internal processing columns
   'to_be_deleted', 'domain_occurrence_count', 'email_occurrence',
