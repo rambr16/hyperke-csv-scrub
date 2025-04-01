@@ -1,3 +1,4 @@
+
 import { Task } from '@/types/csv';
 import { 
   cleanDomain, 
@@ -371,8 +372,17 @@ export const finalizeProcessedData = (
       const newRow: Record<string, any> = {};
       
       Object.keys(row).forEach(column => {
-        // Only add columns that aren't in the COLUMNS_TO_REMOVE list
-        if (!COLUMNS_TO_REMOVE.includes(column)) {
+        // Check if this is an email column we should preserve (like email_1_first_name)
+        const isEmailInfoColumn = column.startsWith('email_') && 
+          (column.includes('_full_name') || 
+           column.includes('_first_name') || 
+           column.includes('_last_name') || 
+           column.includes('_title') || 
+           column.includes('_phone'));
+           
+        // Only add columns that aren't in the COLUMNS_TO_REMOVE list 
+        // or are email information columns we want to preserve
+        if (!COLUMNS_TO_REMOVE.includes(column) || isEmailInfoColumn) {
           newRow[column] = row[column];
         }
       });

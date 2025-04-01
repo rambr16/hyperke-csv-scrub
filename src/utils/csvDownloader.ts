@@ -1,4 +1,3 @@
-
 import Papa from 'papaparse';
 import { Task } from '@/types/csv';
 import { COLUMNS_TO_REMOVE } from '@/utils/csvConstants';
@@ -27,8 +26,17 @@ export const downloadCsvResult = (task: Task) => {
     const cleanRow: Record<string, any> = {};
     
     // Only include columns that aren't in the COLUMNS_TO_REMOVE list
+    // EXCEPT for email-related columns which we want to preserve
     Object.keys(row).forEach(key => {
-      if (!COLUMNS_TO_REMOVE.includes(key)) {
+      const isEmailInfoColumn = key.startsWith('email_') && 
+        (key.includes('_full_name') || 
+         key.includes('_first_name') || 
+         key.includes('_last_name') || 
+         key.includes('_title') || 
+         key.includes('_phone'));
+      
+      // Keep if it's not in COLUMNS_TO_REMOVE or if it's an email info column we want to preserve
+      if (!COLUMNS_TO_REMOVE.includes(key) || isEmailInfoColumn) {
         // If this is the company name field and it's too long, prefix with !!TOO_LONG!!
         if (key === 'cleaned_company_name' && row[key] && row[key].length > 32) {
           cleanRow[key] = `!!TOO_LONG!! ${row[key]}`;

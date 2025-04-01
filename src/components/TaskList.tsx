@@ -58,6 +58,27 @@ const TaskList = () => {
     return value.length > 32;
   };
 
+  // Helper to get display value for a row field that could be in various columns
+  const getDisplayValue = (row: Record<string, any>, fieldType: string) => {
+    // For the primary consolidated fields
+    if (row[fieldType]) {
+      return row[fieldType];
+    }
+
+    // For email-specific fields that should show in the preview
+    if (fieldType === 'first_name') {
+      return row.email_1_first_name || row.email_2_first_name || row.email_3_first_name || '-';
+    }
+    if (fieldType === 'last_name') {
+      return row.email_1_last_name || row.email_2_last_name || row.email_3_last_name || '-';
+    }
+    if (fieldType === 'title') {
+      return row.email_1_title || row.email_2_title || row.email_3_title || '-';
+    }
+    
+    return '-';
+  };
+
   return (
     <div className="space-y-4">
       {tasks.map((task) => (
@@ -117,7 +138,22 @@ const TaskList = () => {
                     <TableHeader>
                       <TableRow>
                         {hasColumn(task.result, 'email') && <TableHead>Email</TableHead>}
-                        {hasColumn(task.result, 'full_name') && <TableHead>Full Name</TableHead>}
+                        {(hasColumn(task.result, 'full_name') || 
+                          hasColumn(task.result, 'email_1_full_name') || 
+                          hasColumn(task.result, 'email_2_full_name') || 
+                          hasColumn(task.result, 'email_3_full_name')) && <TableHead>Full Name</TableHead>}
+                        {(hasColumn(task.result, 'first_name') || 
+                          hasColumn(task.result, 'email_1_first_name') || 
+                          hasColumn(task.result, 'email_2_first_name') || 
+                          hasColumn(task.result, 'email_3_first_name')) && <TableHead>First Name</TableHead>}
+                        {(hasColumn(task.result, 'last_name') || 
+                          hasColumn(task.result, 'email_1_last_name') || 
+                          hasColumn(task.result, 'email_2_last_name') || 
+                          hasColumn(task.result, 'email_3_last_name')) && <TableHead>Last Name</TableHead>}
+                        {(hasColumn(task.result, 'title') || 
+                          hasColumn(task.result, 'email_1_title') || 
+                          hasColumn(task.result, 'email_2_title') || 
+                          hasColumn(task.result, 'email_3_title')) && <TableHead>Title</TableHead>}
                         {hasColumn(task.result, 'other_dm_name') && <TableHead>Other DM Name</TableHead>}
                         {hasColumn(task.result, 'cleaned_website') && <TableHead>Domain</TableHead>}
                         {hasColumn(task.result, 'cleaned_company_name') && <TableHead>Company</TableHead>}
@@ -128,15 +164,37 @@ const TaskList = () => {
                       {getFilteredPreviewData(task.result).slice(0, 5).map((row, idx) => (
                         <TableRow key={idx}>
                           {hasColumn(task.result, 'email') && <TableCell>{row.email || '-'}</TableCell>}
-                          {hasColumn(task.result, 'full_name') && <TableCell>{row.full_name || '-'}</TableCell>}
-                          {hasColumn(task.result, 'other_dm_name') && <TableCell className="font-medium">{row.other_dm_name || '-'}</TableCell>}
-                          {hasColumn(task.result, 'cleaned_website') && <TableCell>{row.cleaned_website || '-'}</TableCell>}
+                          {(hasColumn(task.result, 'full_name') || 
+                            hasColumn(task.result, 'email_1_full_name') || 
+                            hasColumn(task.result, 'email_2_full_name') || 
+                            hasColumn(task.result, 'email_3_full_name')) && 
+                            <TableCell>{getDisplayValue(row, 'full_name')}</TableCell>}
+                          {(hasColumn(task.result, 'first_name') || 
+                            hasColumn(task.result, 'email_1_first_name') || 
+                            hasColumn(task.result, 'email_2_first_name') || 
+                            hasColumn(task.result, 'email_3_first_name')) && 
+                            <TableCell>{getDisplayValue(row, 'first_name')}</TableCell>}
+                          {(hasColumn(task.result, 'last_name') || 
+                            hasColumn(task.result, 'email_1_last_name') || 
+                            hasColumn(task.result, 'email_2_last_name') || 
+                            hasColumn(task.result, 'email_3_last_name')) && 
+                            <TableCell>{getDisplayValue(row, 'last_name')}</TableCell>}
+                          {(hasColumn(task.result, 'title') || 
+                            hasColumn(task.result, 'email_1_title') || 
+                            hasColumn(task.result, 'email_2_title') || 
+                            hasColumn(task.result, 'email_3_title')) && 
+                            <TableCell>{getDisplayValue(row, 'title')}</TableCell>}
+                          {hasColumn(task.result, 'other_dm_name') && 
+                            <TableCell className="font-medium">{row.other_dm_name || '-'}</TableCell>}
+                          {hasColumn(task.result, 'cleaned_website') && 
+                            <TableCell>{row.cleaned_website || '-'}</TableCell>}
                           {hasColumn(task.result, 'cleaned_company_name') && (
                             <TableCell className={isCompanyNameTooLong(row.cleaned_company_name) ? 'bg-red-100 text-red-800' : ''}>
                               {row.cleaned_company_name || '-'}
                             </TableCell>
                           )}
-                          {hasColumn(task.result, 'mx_provider') && <TableCell>{row.mx_provider || '-'}</TableCell>}
+                          {hasColumn(task.result, 'mx_provider') && 
+                            <TableCell>{row.mx_provider || '-'}</TableCell>}
                         </TableRow>
                       ))}
                     </TableBody>
