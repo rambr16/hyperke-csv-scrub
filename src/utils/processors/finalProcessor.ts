@@ -1,5 +1,4 @@
-
-import { COLUMNS_TO_REMOVE } from '@/utils/csvConstants';
+import { COLUMNS_TO_REMOVE, CRITICAL_COLUMNS } from '@/utils/csvConstants';
 
 export const finalizeProcessedData = (
   processedData: Array<Record<string, any>>
@@ -18,33 +17,27 @@ export const finalizeProcessedData = (
     return true; // Keep all other rows
   });
 
+  console.log("Starting finalizeProcessedData. Sample row before processing:", 
+    filteredData.length > 0 ? JSON.stringify(Object.keys(filteredData[0]).filter(k => k.includes('name'))) : 'No data');
+
   // Create a new array with the modified rows
   const finalData = filteredData.map(row => {
     // Create a new object with only the columns we want to keep
     const newRow: Record<string, any> = {};
     
     Object.keys(row).forEach(column => {
-      // Check if this is a column we should always preserve
-      const isPreservedColumn = 
-        column === 'email' ||
-        column === 'full_name' || 
-        column === 'first_name' || 
-        column === 'last_name' || 
-        column === 'title' || 
-        column === 'phone' ||
-        column === 'other_dm_name' ||
-        column === 'mx_provider' ||
-        column === 'cleaned_website' ||
-        column === 'cleaned_company_name' ||
-        column.startsWith('email_');  // Keep ALL email_X columns including email_1, email_2, etc.
+      // Check if this is a critical column we should always preserve
+      const isCriticalColumn = CRITICAL_COLUMNS.includes(column) || column.startsWith('email_');
+      
+      // Log when we encounter important name fields
+      if (column === 'first_name' || column === 'last_name' || 
+          column.includes('_first_name') || column.includes('_last_name')) {
+        console.log(`Finalizer processing column: ${column} = ${row[column]}`);
+      }
       
       // Only add columns that aren't in the COLUMNS_TO_REMOVE list 
       // or are columns we want to preserve
-      if (!COLUMNS_TO_REMOVE.includes(column) || isPreservedColumn) {
-        // Add debugging for name fields
-        if (column === 'first_name' || column === 'last_name') {
-          console.log(`Finalizer including column: ${column} = ${row[column]}`);
-        }
+      if (!COLUMNS_TO_REMOVE.includes(column) || isCriticalColumn) {
         newRow[column] = row[column];
       }
     });
@@ -64,6 +57,7 @@ export const finalizeProcessedData = (
     console.log('Final output sample row keys:', Object.keys(sampleRow));
     console.log('Sample first_name:', sampleRow.first_name);
     console.log('Sample last_name:', sampleRow.last_name);
+    console.log('Name columns in output:', Object.keys(sampleRow).filter(k => k.includes('name')));
   }
   
   return finalData;

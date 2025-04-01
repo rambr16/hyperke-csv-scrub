@@ -1,3 +1,4 @@
+
 // Columns to remove in output CSV
 export const COLUMNS_TO_REMOVE = [
   // DO NOT INCLUDE these fields here as we want to keep them:
@@ -32,3 +33,27 @@ export const COLUMNS_TO_REMOVE = [
   'Key', 'ID', 'Company Founded Year', 'Seniority', 'Function', 
   'Company Twitter', 'Company Facebook', 'Alexa Ranking', 'Keywords'
 ];
+
+// Explicitly define columns that must be preserved regardless of other filtering
+export const CRITICAL_COLUMNS = [
+  'email', 
+  'full_name', 
+  'first_name', 
+  'last_name', 
+  'title', 
+  'phone',
+  'other_dm_name',
+  'mx_provider',
+  'cleaned_website',
+  'cleaned_company_name'
+];
+
+// Add all email_X prefixed columns to critical columns
+for (let i = 1; i <= 5; i++) {
+  CRITICAL_COLUMNS.push(`email_${i}`);
+  CRITICAL_COLUMNS.push(`email_${i}_full_name`);
+  CRITICAL_COLUMNS.push(`email_${i}_first_name`);
+  CRITICAL_COLUMNS.push(`email_${i}_last_name`);
+  CRITICAL_COLUMNS.push(`email_${i}_title`);
+  CRITICAL_COLUMNS.push(`email_${i}_phone`);
+}

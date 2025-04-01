@@ -1,12 +1,15 @@
 
 import Papa from 'papaparse';
 import { Task } from '@/types/csv';
-import { COLUMNS_TO_REMOVE } from '@/utils/csvConstants';
+import { COLUMNS_TO_REMOVE, CRITICAL_COLUMNS } from '@/utils/csvConstants';
 
 export const downloadCsvResult = (task: Task) => {
   if (!task || !task.result) {
     throw new Error("No processed data found for this task");
   }
+  
+  console.log("Starting CSV download with columns:", 
+    task.result.length > 0 ? Object.keys(task.result[0]).filter(k => k.includes('name')) : 'No data');
   
   // Filter out rows where cleaned_website is not blank AND domain_occurrence_count > 6
   const filteredData = task.result.filter(row => {
@@ -28,27 +31,26 @@ export const downloadCsvResult = (task: Task) => {
     
     // Process each column in the row
     for (const key of Object.keys(row)) {
-      // Define critical columns that must be preserved
-      const isCriticalColumn = 
-        key === 'email' ||
-        key === 'full_name' || 
-        key === 'first_name' || 
-        key === 'last_name' || 
-        key === 'title' || 
-        key === 'phone' ||
-        key === 'other_dm_name' ||
-        key === 'mx_provider' ||
-        key === 'cleaned_website' ||
-        key === 'cleaned_company_name' ||
-        key.startsWith('email_');  // Keep ALL email_X columns
+      // Check if this is a critical column we must preserve
+      const isCriticalColumn = CRITICAL_COLUMNS.includes(key) || 
+                              key.startsWith('email_') || 
+                              key === 'first_name' || 
+                              key === 'last_name' || 
+                              key === 'full_name';
+      
+      // Log name-related fields for debugging
+      if (key === 'first_name' || key === 'last_name' || 
+          key.includes('_first_name') || key.includes('_last_name')) {
+        console.log(`CSV Export including name field: ${key} = ${row[key]}`);
+      }
       
       // Keep the column if:
       // 1. It's not in COLUMNS_TO_REMOVE, OR
       // 2. It's a critical column we must preserve
       if (!COLUMNS_TO_REMOVE.includes(key) || isCriticalColumn) {
-        // For debugging name fields
+        // Debug log for important fields
         if (key === 'first_name' || key === 'last_name') {
-          console.log(`CSV Export including: ${key} = ${row[key]}`);
+          console.log(`CSV Export including critical field: ${key} = ${row[key]}`);
         }
         
         // If this is the company name field and it's too long, prefix with !!TOO_LONG!!
@@ -70,6 +72,7 @@ export const downloadCsvResult = (task: Task) => {
     console.log('Columns in export:', Object.keys(exportData[0]));
     console.log('First name in export:', exportData[0].first_name);
     console.log('Last name in export:', exportData[0].last_name);
+    console.log('Name columns in final export:', Object.keys(exportData[0]).filter(k => k.includes('name')));
   }
   
   const csv = Papa.unparse(exportData);
