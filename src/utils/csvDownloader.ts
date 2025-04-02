@@ -25,6 +25,16 @@ export const downloadCsvResult = (task: Task) => {
     return true; // Keep all other rows
   });
   
+  // Log email-specific name fields to see if they exist in the data
+  if (filteredData.length > 0) {
+    const firstRow = filteredData[0];
+    const emailFields = Object.keys(firstRow).filter(k => k.startsWith('email_') && (k.includes('first_name') || k.includes('last_name')));
+    console.log("Email name fields in data:", emailFields);
+    emailFields.forEach(field => {
+      console.log(`Field ${field} value:`, firstRow[field]);
+    });
+  }
+  
   // Prepare the data for CSV export
   const exportData = filteredData.map(row => {
     const exportRow: Record<string, any> = {};
@@ -38,10 +48,9 @@ export const downloadCsvResult = (task: Task) => {
                               key === 'last_name' || 
                               key === 'full_name';
       
-      // Log name-related fields for debugging
-      if (key === 'first_name' || key === 'last_name' || 
-          key.includes('_first_name') || key.includes('_last_name')) {
-        console.log(`CSV Export including name field: ${key} = ${row[key]}`);
+      // Log any email name fields to verify they're being processed
+      if (key.startsWith('email_') && (key.includes('first_name') || key.includes('last_name'))) {
+        console.log(`Processing email name field: ${key} = ${row[key]}`);
       }
       
       // Keep the column if:
@@ -49,8 +58,8 @@ export const downloadCsvResult = (task: Task) => {
       // 2. It's a critical column we must preserve
       if (!COLUMNS_TO_REMOVE.includes(key) || isCriticalColumn) {
         // Debug log for important fields
-        if (key === 'first_name' || key === 'last_name') {
-          console.log(`CSV Export including critical field: ${key} = ${row[key]}`);
+        if (key.includes('first_name') || key.includes('last_name')) {
+          console.log(`CSV Export including name field: ${key} = ${row[key]}`);
         }
         
         // If this is the company name field and it's too long, prefix with !!TOO_LONG!!
@@ -70,9 +79,17 @@ export const downloadCsvResult = (task: Task) => {
   // Sample the columns in the first row for debugging
   if (exportData.length > 0) {
     console.log('Columns in export:', Object.keys(exportData[0]));
-    console.log('First name in export:', exportData[0].first_name);
-    console.log('Last name in export:', exportData[0].last_name);
-    console.log('Name columns in final export:', Object.keys(exportData[0]).filter(k => k.includes('name')));
+    
+    // Log all email-related name fields in the export
+    const emailNameFields = Object.keys(exportData[0]).filter(k => 
+      k.startsWith('email_') && (k.includes('first_name') || k.includes('last_name'))
+    );
+    console.log('Email name fields in export:', emailNameFields);
+    
+    // Log values for each email name field
+    emailNameFields.forEach(field => {
+      console.log(`${field} in export:`, exportData[0][field]);
+    });
   }
   
   const csv = Papa.unparse(exportData);

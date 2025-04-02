@@ -24,8 +24,17 @@ export const useCsvDownloader = (
       if (task.result.length > 0) {
         console.log("Download requested. Sample data:", 
           Object.keys(task.result[0]).filter(k => k.includes('name')));
-        console.log("First name in data:", task.result[0].first_name);
-        console.log("Last name in data:", task.result[0].last_name);
+        
+        // Log all email-specific name fields in the task result
+        const emailNameFields = Object.keys(task.result[0]).filter(k => 
+          k.startsWith('email_') && (k.includes('first_name') || k.includes('last_name'))
+        );
+        console.log('Email name fields in task result:', emailNameFields);
+        
+        // Log values for each email name field
+        emailNameFields.forEach(field => {
+          console.log(`${field} in task result:`, task.result[0][field]);
+        });
       }
       
       const filename = downloadCsvResult(task);

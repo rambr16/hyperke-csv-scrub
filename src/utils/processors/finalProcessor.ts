@@ -19,6 +19,17 @@ export const finalizeProcessedData = (
 
   console.log("Starting finalizeProcessedData. Sample row before processing:", 
     filteredData.length > 0 ? JSON.stringify(Object.keys(filteredData[0]).filter(k => k.includes('name'))) : 'No data');
+  
+  // Log presence of email-specific name fields before processing
+  if (filteredData.length > 0) {
+    const emailNameFields = Object.keys(filteredData[0]).filter(k => 
+      k.startsWith('email_') && (k.includes('first_name') || k.includes('last_name'))
+    );
+    console.log("Email name fields before processing:", emailNameFields);
+    emailNameFields.forEach(field => {
+      console.log(`${field} before processing:`, filteredData[0][field]);
+    });
+  }
 
   // Create a new array with the modified rows
   const finalData = filteredData.map(row => {
@@ -27,12 +38,15 @@ export const finalizeProcessedData = (
     
     Object.keys(row).forEach(column => {
       // Check if this is a critical column we should always preserve
-      const isCriticalColumn = CRITICAL_COLUMNS.includes(column) || column.startsWith('email_');
+      const isCriticalColumn = CRITICAL_COLUMNS.includes(column) || 
+                              column.startsWith('email_') || 
+                              column === 'first_name' || 
+                              column === 'last_name' || 
+                              column === 'full_name';
       
-      // Log when we encounter important name fields
-      if (column === 'first_name' || column === 'last_name' || 
-          column.includes('_first_name') || column.includes('_last_name')) {
-        console.log(`Finalizer processing column: ${column} = ${row[column]}`);
+      // Log when we encounter important email name fields
+      if (column.startsWith('email_') && (column.includes('first_name') || column.includes('last_name'))) {
+        console.log(`Finalizer processing email name field: ${column} = ${row[column]}`);
       }
       
       // Only add columns that aren't in the COLUMNS_TO_REMOVE list 
@@ -55,9 +69,17 @@ export const finalizeProcessedData = (
   if (finalData.length > 0) {
     const sampleRow = finalData[0];
     console.log('Final output sample row keys:', Object.keys(sampleRow));
-    console.log('Sample first_name:', sampleRow.first_name);
-    console.log('Sample last_name:', sampleRow.last_name);
-    console.log('Name columns in output:', Object.keys(sampleRow).filter(k => k.includes('name')));
+    
+    // Log all email-specific name fields in the final output
+    const emailNameFields = Object.keys(sampleRow).filter(k => 
+      k.startsWith('email_') && (k.includes('first_name') || k.includes('last_name'))
+    );
+    console.log('Email name fields in final output:', emailNameFields);
+    
+    // Log values for each email name field
+    emailNameFields.forEach(field => {
+      console.log(`${field} in final output:`, sampleRow[field]);
+    });
   }
   
   return finalData;
