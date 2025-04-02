@@ -1,3 +1,4 @@
+
 /**
  * Contact utilities for CSV processing
  */
@@ -84,8 +85,8 @@ export const extractFullName = (row: Record<string, any>, primaryField: string =
  */
 export const consolidateMultipleEmails = (
   row: Record<string, any>
-): Array<{email: string, fullName: string, title: string, phone: string}> => {
-  const contacts: Array<{email: string, fullName: string, title: string, phone: string}> = [];
+): Array<{email: string, fullName: string, firstName: string, lastName: string, title: string, phone: string}> => {
+  const contacts: Array<{email: string, fullName: string, firstName: string, lastName: string, title: string, phone: string}> = [];
   
   // Process up to 3 email columns
   for (let i = 1; i <= 3; i++) {
@@ -94,12 +95,19 @@ export const consolidateMultipleEmails = (
     
     if (!email) continue;
     
-    // Get full name from corresponding field or fallback
+    // Get full name, first name, and last name from corresponding fields
     const fullNameField = `email_${i}_full_name`;
-    let fullName = row[fullNameField] || '';
+    const firstNameField = `email_${i}_first_name`;
+    const lastNameField = `email_${i}_last_name`;
     
-    // No longer using company name as fallback for full name
-    // Keep fullName blank if it's not available in the specific email fields
+    const fullName = row[fullNameField] || '';
+    const firstName = row[firstNameField] || '';
+    const lastName = row[lastNameField] || '';
+    
+    // For debugging, log the name fields found
+    if (firstName || lastName) {
+      console.log(`Found name fields for ${emailField}: firstName=${firstName}, lastName=${lastName}`);
+    }
     
     // Get title and phone if available
     const titleField = `email_${i}_title`;
@@ -111,6 +119,8 @@ export const consolidateMultipleEmails = (
     contacts.push({
       email,
       fullName,
+      firstName,
+      lastName,
       title,
       phone
     });

@@ -1,3 +1,4 @@
+
 import { COLUMNS_TO_REMOVE, CRITICAL_COLUMNS } from '@/utils/csvConstants';
 
 export const finalizeProcessedData = (
@@ -22,12 +23,13 @@ export const finalizeProcessedData = (
   
   // Log presence of email-specific name fields before processing
   if (filteredData.length > 0) {
-    const emailNameFields = Object.keys(filteredData[0]).filter(k => 
+    const firstRow = filteredData[0];
+    const emailNameFields = Object.keys(firstRow).filter(k => 
       k.startsWith('email_') && (k.includes('first_name') || k.includes('last_name'))
     );
     console.log("Email name fields before processing:", emailNameFields);
     emailNameFields.forEach(field => {
-      console.log(`${field} before processing:`, filteredData[0][field]);
+      console.log(`${field} before processing:`, firstRow[field]);
     });
   }
 

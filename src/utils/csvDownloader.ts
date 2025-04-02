@@ -1,4 +1,3 @@
-
 import Papa from 'papaparse';
 import { Task } from '@/types/csv';
 import { COLUMNS_TO_REMOVE, CRITICAL_COLUMNS } from '@/utils/csvConstants';
@@ -10,6 +9,20 @@ export const downloadCsvResult = (task: Task) => {
   
   console.log("Starting CSV download with columns:", 
     task.result.length > 0 ? Object.keys(task.result[0]).filter(k => k.includes('name')) : 'No data');
+  
+  // Log all email-specific name fields to verify they exist in the input data
+  if (task.result.length > 0) {
+    const firstRow = task.result[0];
+    const emailFields = Object.keys(firstRow).filter(k => k.startsWith('email_'));
+    console.log("All email fields in data:", emailFields);
+    
+    const emailNameFields = emailFields.filter(k => k.includes('first_name') || k.includes('last_name'));
+    console.log("Email name fields in data:", emailNameFields);
+    
+    emailNameFields.forEach(field => {
+      console.log(`Field ${field} value:`, firstRow[field]);
+    });
+  }
   
   // Filter out rows where cleaned_website is not blank AND domain_occurrence_count > 6
   const filteredData = task.result.filter(row => {
@@ -25,22 +38,24 @@ export const downloadCsvResult = (task: Task) => {
     return true; // Keep all other rows
   });
   
-  // Log email-specific name fields to see if they exist in the data
-  if (filteredData.length > 0) {
-    const firstRow = filteredData[0];
-    const emailFields = Object.keys(firstRow).filter(k => k.startsWith('email_') && (k.includes('first_name') || k.includes('last_name')));
-    console.log("Email name fields in data:", emailFields);
-    emailFields.forEach(field => {
-      console.log(`Field ${field} value:`, firstRow[field]);
-    });
-  }
-  
   // Prepare the data for CSV export
   const exportData = filteredData.map(row => {
     const exportRow: Record<string, any> = {};
     
-    // Process each column in the row
-    for (const key of Object.keys(row)) {
+    // First, ensure all critical columns are included
+    CRITICAL_COLUMNS.forEach(key => {
+      if (row[key] !== undefined) {
+        exportRow[key] = row[key];
+      }
+    });
+    
+    // Now process each column in the row
+    Object.keys(row).forEach(key => {
+      // Skip columns that are already added from CRITICAL_COLUMNS
+      if (exportRow[key] !== undefined) {
+        return;
+      }
+      
       // Check if this is a critical column we must preserve
       const isCriticalColumn = CRITICAL_COLUMNS.includes(key) || 
                               key.startsWith('email_') || 
@@ -69,7 +84,7 @@ export const downloadCsvResult = (task: Task) => {
           exportRow[key] = row[key];
         }
       }
-    }
+    });
     
     return exportRow;
   });

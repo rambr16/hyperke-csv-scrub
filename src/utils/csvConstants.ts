@@ -1,4 +1,3 @@
-
 // Columns to remove in output CSV
 export const COLUMNS_TO_REMOVE = [
   // DO NOT INCLUDE these fields here as we want to keep them:

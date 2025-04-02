@@ -36,10 +36,17 @@ export const processMultipleEmailCsv = async (
     
     // Create a new row for each contact
     return contacts.map(contact => {
+      // Log the first_name and last_name values being added
+      if (contact.firstName || contact.lastName) {
+        console.log(`Creating row with email=${contact.email}, firstName=${contact.firstName}, lastName=${contact.lastName}`);
+      }
+      
       return {
         ...row,
         email: contact.email,
         full_name: contact.fullName,
+        first_name: contact.firstName,
+        last_name: contact.lastName,
         title: contact.title,
         phone: contact.phone,
         cleaned_company_name: cleanedCompanyName,
@@ -148,6 +155,19 @@ export const processMultipleEmailCsv = async (
   });
   
   console.log(`Final processed data has ${finalData.length} rows`);
+  
+  // Log a sample row to check for email-specific name fields
+  if (finalData.length > 0) {
+    const sampleRow = finalData[0];
+    const nameFields = Object.keys(sampleRow).filter(key => 
+      key.includes('name') || key.startsWith('email_')
+    );
+    
+    console.log('Sample row name fields:', nameFields);
+    nameFields.forEach(field => {
+      console.log(`${field} = ${sampleRow[field]}`);
+    });
+  }
   
   return finalData;
 };
