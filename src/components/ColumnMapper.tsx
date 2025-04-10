@@ -120,6 +120,9 @@ const ColumnMapper = () => {
 
   const requiredFields = getRequiredFields(task.csvType || 'unknown');
 
+  // Filter out any empty header values to prevent the SelectItem error
+  const validHeaders = task.originalHeaders.filter(header => header && header.trim() !== '');
+
   return (
     <div className="container mx-auto py-8 px-4 max-w-2xl">
       <Card className="shadow-md">
@@ -182,9 +185,13 @@ const ColumnMapper = () => {
                       <SelectValue placeholder="Select a column" />
                     </SelectTrigger>
                     <SelectContent>
-                      {task.originalHeaders.map((header) => (
-                        <SelectItem key={header} value={header}>{header}</SelectItem>
-                      ))}
+                      {validHeaders.length > 0 ? (
+                        validHeaders.map((header) => (
+                          <SelectItem key={header} value={header}>{header}</SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="no-headers-found">No valid headers found</SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
